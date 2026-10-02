@@ -1,0 +1,6 @@
+@FinTechWalletAPI_HostAddress = http://localhost:5124
+
+GET {{FinTechWalletAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
