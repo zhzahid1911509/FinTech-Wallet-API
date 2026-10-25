@@ -1,0 +1,40 @@
+@base = https://localhost:7081
+@token = REPLACE_WITH_ACCESS_TOKEN
+@refreshToken = REPLACE_WITH_REFRESH_TOKEN
+@recipientWalletId = REPLACE_WITH_BOB_WALLET_ID
+@password = REPLACE_WITH_YOUR_DEMO_PASSWORD
+
+### Login (after demo seeding)
+POST {{base}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"alice@example.test","password":"{{password}}"}
+
+### Own wallet
+GET {{base}}/api/v1/wallets/me
+Authorization: Bearer {{token}}
+
+### Transfer. Repeat with the SAME key and payload to replay safely.
+POST {{base}}/api/v1/transfers
+Authorization: Bearer {{token}}
+Idempotency-Key: demo-transfer-001
+Content-Type: application/json
+
+{"recipientWalletId":"{{recipientWalletId}}","amount":500.00}
+
+### History
+GET {{base}}/api/v1/transactions?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Rotate refresh token ONCE; replace both saved tokens with the response.
+POST {{base}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{"refreshToken":"{{refreshToken}}"}
+
+### Logout
+POST {{base}}/api/v1/auth/logout
+Authorization: Bearer {{token}}
+
+### Database readiness
+GET {{base}}/health/ready

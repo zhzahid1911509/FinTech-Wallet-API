@@ -1,0 +1,32 @@
+name: wallet-ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: Ci-Temporary-Password-239!
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Ci-Temporary-Password-239!' -C -Q 'SELECT 1' || exit 1"
+          --health-interval=10s --health-timeout=5s --health-retries=20
+    env:
+      WALLET_TEST_SQL: 'Server=localhost,1433;User Id=sa;Password=Ci-Temporary-Password-239!;Encrypt=True;TrustServerCertificate=True'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore Tests/FinTechWalletAPI.Tests.csproj
+      - run: dotnet build Tests/FinTechWalletAPI.Tests.csproj --no-restore --configuration Release
+      - run: dotnet test Tests/FinTechWalletAPI.Tests.csproj --no-build --configuration Release --logger 'trx;LogFileName=tests.trx'
+      - run: dotnet tool restore
+      - run: dotnet ef migrations has-pending-model-changes
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: Tests/TestResults/*.trx
