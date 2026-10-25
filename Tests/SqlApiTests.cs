@@ -16,7 +16,7 @@ namespace FinTechWalletAPI.Tests;
 
 // These tests deliberately use SQL Server, not EF InMemory or SQLite substitutes.
 [Trait("Category", "SqlServer")]
-public sealed class SqlApiTests : IAsyncLifetime
+public sealed partial class SqlApiTests : IAsyncLifetime
 {
     private WalletFactory factory = null!;
     private HttpClient client = null!;
@@ -40,9 +40,9 @@ public sealed class SqlApiTests : IAsyncLifetime
         client.Dispose();
         await factory.DisposeAsync();
     }
-    private async Task<TokenResponse> Login(string email)
+    private async Task<TokenResponse> Login(string email, string password = "Test-Only-Password-239!")
     {
-        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, "Test-Only-Password-239!"));
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, password));
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<TokenResponse>())!;
     }
@@ -67,6 +67,7 @@ public sealed class SqlApiTests : IAsyncLifetime
         var input = new RegisterRequest("new@example.test", "Test-Only-Password-239!");
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/auth/register", input)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/v1/auth/register", input)).StatusCode);
+        await ConfirmRegistration(input.Email);
         var token = await Login(input.Email);
         Assert.Equal(0, (await Wallet(token.AccessToken)).Balance);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/wallets/me")).StatusCode);
@@ -138,6 +139,7 @@ public sealed class SqlApiTests : IAsyncLifetime
         var target = await Wallet(bob.AccessToken);
         var transfer = (await (await Send(alice.AccessToken, target.Id, 1m, "private")).Content.ReadFromJsonAsync<TransferResponse>())!;
         (await client.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequest("eve@example.test", "Test-Only-Password-239!"))).EnsureSuccessStatusCode();
+        await ConfirmRegistration("eve@example.test");
         var eve = await Login("eve@example.test");
         Assert.Equal(HttpStatusCode.NotFound, (await Get($"/api/v1/transfers/{transfer.Id}", eve.AccessToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await Get($"/api/v1/transfers/{transfer.Id}", bob.AccessToken)).StatusCode);
@@ -182,6 +184,7 @@ public sealed class SqlApiTests : IAsyncLifetime
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting("Email:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:DefaultConnection", connection);
             builder.UseSetting("Jwt:SigningKey", "integration-tests-only-not-a-production-key-239!");
             builder.UseSetting("Demo:Password", "Test-Only-Password-239!");

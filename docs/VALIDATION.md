@@ -1,29 +1,48 @@
-# Validation — v0.1.0
+# Validation — v0.2.0
 
-Validation performed on 2026-10-25 with .NET SDK 10.0.402 and runtime 10.0.13.
+Validated on 2026-10-25 with .NET SDK 10.0.402 / runtime 10.0.13 and a temporary SQL Server 2025 Developer instance (17.0.4065.4). Test databases were isolated and deleted by the suite.
 
 | Check | Result |
 |---|---|
-| Release build of API and test project | Passed; 0 warnings, 0 errors |
-| Database-independent tests | 18 passed; 0 failed; 0 skipped |
-| EF model vs migration snapshot | No pending model changes |
-| SQL migration script generation | Passed; `docs/schema.sql` included |
-| NuGet vulnerability query including transitive API packages | No vulnerable packages reported by the configured feed at validation time |
-| SQL Server integration tests | 9 supplied and compiled; NOT executed in this environment |
-| Live deployment, provider integration or load test | Not performed |
+| Release build of API and tests | Passed; 0 warnings, 0 errors |
+| Complete test suite | 50 passed; 0 failed; 0 skipped |
+| Database-independent tests | 29 passed |
+| Real SQL Server integration tests | 21 passed |
+| Runtime and design-time models vs snapshot | Both match |
+| EF CLI pending model check | No pending changes |
+| Original v0.1.0 migration files | Byte-for-byte unchanged |
+| Existing-data upgrade test | Passed: balances/ledger preserved, old sessions revoked |
+| Idempotent SQL migration script | Generated in `docs/schema.sql` |
+| NuGet vulnerability check including transitive API dependencies | No vulnerable packages reported by the configured feed at check time |
 
-The database-independent suite covers amount limits/precision, key validation, culture-independent request fingerprints, append-only/paired ledger guards, application startup, unauthenticated access denial, registration validation and OpenAPI generation.
+## What was exercised
 
-The SQL Server suite covers registration/duplicate accounts, balanced transfers and replay, concurrent spending, concurrent duplicates, rejected transfers, transaction ownership, refresh replay, logout revocation, and rollback after an injected database constraint failure. It uses actual SQL Server transactions and rowversion semantics. It requires `WALLET_TEST_SQL`; there was no SQL Server service available during this delivery.
+Financial integration: balanced transfers, stable idempotent replay, simultaneous duplicate requests, simultaneous spending without overdraft, rejected transfers, participant-only reads, database-error rollback and migration preservation.
 
-Build/unit success does not establish that the SQL integration suite passes. Run the full suite before deployment or accepting the financial milestone. The supplied CI workflow automates that step but has not been executed remotely by this delivery.
+Account integration: registration/verification, account/purpose/expiry checks, single-use tokens, reset with access/refresh-session invalidation, generic recovery responses, persisted resend cooldown, ownership of session revocation, logout-all and persisted login lockout.
 
-Commands used:
+Operations integration: operator role/current-password enforcement, freeze/unfreeze effects and audit, immediate role-revocation enforcement, reconciliation detection without automatic repair and owned history filters.
 
-```text
-dotnet build Tests/FinTechWalletAPI.Tests.csproj -c Release
-dotnet test Tests/FinTechWalletAPI.Tests.csproj -c Release --no-build --filter Category!=SqlServer
-dotnet ef migrations has-pending-model-changes --no-build
-dotnet ef migrations script --idempotent --no-build --output docs/schema.sql
-dotnet list FinTechWalletAPI.csproj package --vulnerable --include-transitive --format json
+Email integration: encrypted outbox, retry scheduling, successful payload clearing and competing worker claims. Development MIME pickup and encrypted-envelope tamper rejection were tested without an SMTP provider.
+
+The first SQL run exposed EF-wrapped deadlock exceptions escaping the original retry classifier. The handler now inspects the exception chain; the final full suite passes with this correction. An operator test also needed a fresh DI scope for a separate console invocation to avoid stale tracked Identity state.
+
+## Limits
+
+- SMTP code compiled and the queue/transport interface was tested; no live provider email was sent or inbox delivery verified.
+- SQL Server 2025 was exercised locally. The supplied CI targets SQL Server 2022, but that remote workflow was not executed here.
+- No production deployment, sustained load test, external payment integration, MFA or disaster-recovery drill was performed.
+- Passing tests is not a claim that the application is ready to handle real funds.
+
+## Reproduce
+
+```powershell
+dotnet restore Tests/FinTechWalletAPI.Tests.csproj --locked-mode
+dotnet build Tests/FinTechWalletAPI.Tests.csproj -c Release --no-restore
+# Set WALLET_TEST_SQL to a disposable SQL Server; tests need create/drop database permission.
+dotnet test Tests/FinTechWalletAPI.Tests.csproj -c Release --no-build
+dotnet ef migrations has-pending-model-changes
+dotnet list FinTechWalletAPI.csproj package --vulnerable --include-transitive
 ```
+
+Without SQL Server, run `dotnet test Tests/FinTechWalletAPI.Tests.csproj --filter 'Category!=SqlServer'`. Do not represent that filtered run as full financial validation.

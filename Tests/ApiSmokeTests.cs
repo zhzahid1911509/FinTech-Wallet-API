@@ -11,6 +11,7 @@ public sealed class ApiSmokeTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting("Email:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:DefaultConnection", "Server=localhost;Database=NeverConnect;Integrated Security=True;Connect Timeout=1");
             builder.UseSetting("Jwt:SigningKey", "smoke-tests-only-not-a-production-key-239!");
         }

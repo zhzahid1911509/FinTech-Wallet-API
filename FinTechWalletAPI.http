@@ -38,3 +38,44 @@ Authorization: Bearer {{token}}
 
 ### Database readiness
 GET {{base}}/health/ready
+
+
+### Register a real test address; read the verification email before login
+POST {{base}}/api/v1/auth/register
+Content-Type: application/json
+
+{"email":"you@example.com","password":"Your-Strong-Password-239!"}
+
+### Confirm email using the code from App_Data/mail or your SMTP inbox
+POST {{base}}/api/v1/auth/confirm-email
+Content-Type: application/json
+
+{"email":"you@example.com","token":"REPLACE_WITH_EMAIL_CODE"}
+
+### Request recovery (always a generic accepted response)
+POST {{base}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{"email":"you@example.com"}
+
+### Reset password and invalidate all existing sessions
+POST {{base}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{"email":"you@example.com","token":"REPLACE_WITH_RESET_CODE","newPassword":"Changed-Strong-Password-239!"}
+
+### Active own sessions
+GET {{base}}/api/v1/auth/sessions
+Authorization: Bearer {{token}}
+
+### Logout all sessions
+POST {{base}}/api/v1/auth/logout-all
+Authorization: Bearer {{token}}
+
+### Filtered history
+GET {{base}}/api/v1/transactions?kind=Transfer&direction=outgoing&page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Operator reconciliation
+GET {{base}}/api/v1/operations/reconciliation
+Authorization: Bearer {{token}}

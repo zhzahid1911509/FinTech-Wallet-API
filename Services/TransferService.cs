@@ -19,7 +19,7 @@ public sealed class TransferService(AppDbContext db)
         for (var attempt = 0; attempt < 4; attempt++)
         {
             try { return await SendOnce(actor, request, key, hash, ct); }
-            catch (Exception e) when (IsRetryable(e))
+            catch (Exception e) when (DatabaseErrors.IsRetryableTransfer(e))
             {
                 db.ChangeTracker.Clear();
                 if (attempt == 3)
@@ -66,8 +66,5 @@ public sealed class TransferService(AppDbContext db)
             new LedgerEntry { TransferId = t.Id, WalletId = t.DestinationWalletId, Credit = t.Amount, Currency = t.Currency, CreatedAt = t.CreatedAt });
         db.AuditEvents.Add(new AuditEvent { ActorId = t.ActorId, TargetId = t.Id, Action = t.Kind + ".Posted" });
     }
-    private static bool IsRetryable(Exception e) => e is DbUpdateConcurrencyException ||
-        e is SqlException { Number: 1205 or 2601 or 2627 } ||
-        e is DbUpdateException { InnerException: SqlException { Number: 1205 or 2601 or 2627 } };
     public static TransferResponse ToResponse(Transfer t) => new(t.Id, t.SourceWalletId, t.DestinationWalletId, t.Amount, t.Currency, t.Kind, t.CreatedAt);
 }

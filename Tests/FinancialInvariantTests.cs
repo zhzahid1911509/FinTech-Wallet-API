@@ -8,6 +8,13 @@ public sealed class FinancialInvariantTests
     private static AppDbContext Context() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseSqlServer("Server=localhost;Database=NeverConnect;Integrated Security=True").Options);
     [Fact]
+    public void RetryClassificationUnwrapsEfConcurrencyButNotApplicationErrors()
+    {
+        Assert.True(FinTechWalletAPI.Infrastructure.DatabaseErrors.IsRetryableTransfer(
+            new InvalidOperationException("wrapper", new DbUpdateConcurrencyException())));
+        Assert.False(FinTechWalletAPI.Infrastructure.DatabaseErrors.IsRetryableTransfer(new InvalidOperationException("application invariant")));
+    }
+    [Fact]
     public async Task UnbalancedPostingFailsBeforeDatabaseWrite()
     {
         await using var db = Context();

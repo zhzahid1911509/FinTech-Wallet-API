@@ -14,7 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace FinTechWalletAPI.Services;
 
 public sealed class AuthService(AppDbContext db, UserManager<User> users,
-    SignInManager<User> signIn, IOptions<JwtSettings> options)
+    SignInManager<User> signIn, IOptions<JwtSettings> options, AccountSecurityService accountSecurity)
 {
     private readonly JwtSettings settings = options.Value;
     public async Task<object> RegisterAsync(RegisterRequest request, CancellationToken ct)
@@ -30,30 +30,38 @@ public sealed class AuthService(AppDbContext db, UserManager<User> users,
         }
         var wallet = new Wallet { UserId = user.Id };
         db.Wallets.Add(wallet);
+        accountSecurity.QueueChallenge(user, ChallengeTokens.VerifyEmail);
         db.AuditEvents.Add(new AuditEvent { ActorId = user.Id, TargetId = wallet.Id, Action = "Account.Registered" });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return new { user.Id, user.Email, WalletId = wallet.Id };
+        return new { user.Id, user.Email, WalletId = wallet.Id, EmailVerificationRequired = true };
     }
     public async Task<TokenResponse> LoginAsync(LoginRequest request, CancellationToken ct)
     {
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var user = await users.FindByEmailAsync(request.Email.Trim());
         if (user is null || !(await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true)).Succeeded)
-            throw new ApiException(401, "invalid_credentials", "Invalid credentials or account temporarily unavailable.");
-        var session = new AuthSession { UserId = user.Id, ExpiresAt = DateTimeOffset.UtcNow.AddDays(settings.SessionDays) };
+            {
+            // Persist Identity's failed-login counter/lockout even though the request is rejected.
+            await tx.CommitAsync(ct);
+            throw new ApiException(401, "invalid_credentials", "Invalid credentials, unverified email or account temporarily unavailable.");
+        }
+        var session = new AuthSession { UserId = user.Id, SecurityStamp = user.SecurityStamp ?? "", ExpiresAt = DateTimeOffset.UtcNow.AddDays(settings.SessionDays) };
         db.Sessions.Add(session);
         var response = Issue(session);
         db.AuditEvents.Add(new AuditEvent { ActorId = user.Id, TargetId = session.Id, Action = "Session.Created" });
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return response;
     }
     public async Task<TokenResponse> RefreshAsync(string raw, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var hash = Hash(raw);
-        var token = await db.RefreshTokens.Include(x => x.Session).SingleOrDefaultAsync(x => x.Hash == hash, ct);
+        var token = await db.RefreshTokens.Include(x => x.Session).ThenInclude(x => x.User).SingleOrDefaultAsync(x => x.Hash == hash, ct);
         var now = DateTimeOffset.UtcNow;
-        if (token is null || token.Session.RevokedAt is not null || token.Session.ExpiresAt <= now)
+        if (token is null || token.Session.RevokedAt is not null || token.Session.ExpiresAt <= now ||
+            !token.Session.User.EmailConfirmed || token.Session.SecurityStamp != token.Session.User.SecurityStamp)
             throw new ApiException(401, "invalid_refresh_token", "Refresh token is invalid or expired.");
         if (token.UsedAt is not null)
         {

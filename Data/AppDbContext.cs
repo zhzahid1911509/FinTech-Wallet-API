@@ -12,6 +12,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
     public DbSet<AuthSession> Sessions => Set<AuthSession>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AccountChallenge> AccountChallenges => Set<AccountChallenge>();
+    public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -69,6 +71,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.RowVersion).IsRowVersion();
             e.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
         });
+        b.Entity<AccountChallenge>(e => {
+            e.Property(x => x.Purpose).HasMaxLength(32);
+            e.Property(x => x.TokenHash).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.SecurityStamp).HasMaxLength(128);
+            e.Property(x => x.RowVersion).IsRowVersion();
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.Purpose, x.CreatedAt });
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<EmailOutbox>(e => {
+            e.Property(x => x.LastErrorType).HasMaxLength(128);
+            e.HasIndex(x => new { x.SentAt, x.FailedAt, x.NextAttemptAt });
+        });
+        b.Entity<AuthSession>().Property(x => x.SecurityStamp).HasMaxLength(128);
+        b.Entity<AuditEvent>().Property(x => x.Reason).HasMaxLength(500);
         b.Entity<AuditEvent>().Property(x => x.Action).HasMaxLength(64);
     }
 

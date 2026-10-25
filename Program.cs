@@ -1,3 +1,6 @@
+using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -20,13 +23,40 @@ if (Encoding.UTF8.GetByteCount(jwt.SigningKey) < 32 || string.IsNullOrWhiteSpace
     string.IsNullOrWhiteSpace(jwt.Audience) || jwt.AccessTokenMinutes is < 1 or > 30 || jwt.SessionDays is < 1 or > 30)
     throw new InvalidOperationException("Configure Jwt:SigningKey (at least 32 random bytes), issuer, audience and valid token lifetimes.");
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+builder.Services.AddOptions<EmailSettings>().Bind(builder.Configuration.GetSection("Email"))
+    .Validate(x => x.Mode is "Pickup" or "Smtp", "Email:Mode must be Pickup or Smtp.")
+    .Validate(x => x.MaxAttempts is >= 1 and <= 10 && x.Port is >= 1 and <= 65535, "Invalid email retry count or port.")
+    .Validate(x => x.Tls is "StartTls" or "SslOnConnect", "SMTP requires StartTls or SslOnConnect.")
+    .Validate(x => x.Mode != "Smtp" || !string.IsNullOrWhiteSpace(x.Host), "Set Email:Host for SMTP.")
+    .Validate(x => MimeKit.MailboxAddress.TryParse(x.From, out _), "Set a valid Email:From address.")
+    .Validate(x => builder.Environment.IsDevelopment() || (x.Mode == "Smtp" && x.WorkerEnabled), "Production requires SMTP delivery and an enabled worker.")
+    .ValidateOnStart();
+var protection = builder.Services.AddDataProtection().SetApplicationName("FinTechWalletAPI");
+var keyDirectory = builder.Configuration["DataProtection:KeyDirectory"];
+if (!builder.Environment.IsDevelopment())
+{
+    if (string.IsNullOrWhiteSpace(keyDirectory) || string.IsNullOrWhiteSpace(builder.Configuration["DataProtection:CertificatePath"]))
+        throw new InvalidOperationException("Production requires DataProtection:KeyDirectory and CertificatePath to persist and encrypt the email key ring.");
+    protection.ProtectKeysWithCertificate(X509CertificateLoader.LoadPkcs12FromFile(
+        builder.Configuration["DataProtection:CertificatePath"]!, builder.Configuration["DataProtection:CertificatePassword"], X509KeyStorageFlags.EphemeralKeySet));
+}
+if (!string.IsNullOrWhiteSpace(keyDirectory)) protection.PersistKeysToFileSystem(new DirectoryInfo(keyDirectory));
+builder.Services.AddSingleton<EmailEnvelope>();
+builder.Services.AddSingleton<IEmailTransport, EmailTransport>();
+builder.Services.AddScoped<EmailDispatcher>();
+builder.Services.AddHostedService<EmailWorker>();
+builder.Services.AddScoped<AccountSecurityService>();
+builder.Services.AddScoped<OperationsService>();
+builder.Services.AddScoped<ReconciliationService>();
+builder.Services.AddScoped<IAuthorizationHandler, WalletOperatorHandler>();
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connection));
 builder.Services.AddIdentityCore<User>(o => {
     o.User.RequireUniqueEmail = true;
+    o.SignIn.RequireConfirmedEmail = true;
     o.Password.RequiredLength = 12;
     o.Lockout.MaxFailedAccessAttempts = 5;
     o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-}).AddEntityFrameworkStores<AppDbContext>().AddSignInManager();
+}).AddRoles<IdentityRole<Guid>>().AddEntityFrameworkStores<AppDbContext>().AddSignInManager().AddDefaultTokenProviders();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o => {
     o.MapInboundClaims = false;
     o.TokenValidationParameters = new TokenValidationParameters {
@@ -46,11 +76,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
             var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
             var now = DateTimeOffset.UtcNow;
             if (!await db.Sessions.AsNoTracking().AnyAsync(s => s.Id == sessionId && s.UserId == userId &&
-                s.RevokedAt == null && s.ExpiresAt > now, context.HttpContext.RequestAborted)) context.Fail("Session expired or revoked.");
+                s.RevokedAt == null && s.ExpiresAt > now && s.User.EmailConfirmed && s.SecurityStamp == s.User.SecurityStamp, context.HttpContext.RequestAborted)) context.Fail("Session expired or revoked.");
         }
     };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o => o.AddPolicy("WalletOperator", p => p.RequireAuthenticatedUser().AddRequirements(new WalletOperatorRequirement())));
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<TransferService>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
@@ -64,6 +94,19 @@ builder.Services.AddRateLimiter(o => {
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 var app = builder.Build();
+if (args.Contains("--grant-operator") || args.Contains("--revoke-operator")) {
+    using var scope = app.Services.CreateScope();
+    var email = app.Configuration["Operations:Email"] ?? throw new InvalidOperationException("Set Operations:Email to the existing account email.");
+    await OperationsService.SetOperatorAsync(scope.ServiceProvider, email, args.Contains("--grant-operator"));
+    return;
+}
+if (args.Contains("--reconcile")) {
+    using var scope = app.Services.CreateScope();
+    var report = await scope.ServiceProvider.GetRequiredService<ReconciliationService>().CheckAsync(CancellationToken.None);
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    Environment.ExitCode = report.Healthy ? 0 : 2;
+    return;
+}
 if (args.Contains("--seed-demo")) {
     using var scope = app.Services.CreateScope();
     await DemoSeeder.SeedAsync(scope.ServiceProvider, app.Configuration, app.Environment);
@@ -80,6 +123,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
+app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.2.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) => {
     try { return await db.Database.CanConnectAsync(ct) && !((await db.Database.GetPendingMigrationsAsync(ct)).Any())
@@ -101,11 +145,47 @@ auth.MapPost("/logout", async (ClaimsPrincipal user, AuthService service, Cancel
     await service.LogoutAsync(UserId(user), Guid.Parse(user.FindFirstValue("sid")!), ct);
     return Results.NoContent();
 }).RequireAuthorization();
+auth.MapPost("/resend-verification", async (EmailRequest r, AccountSecurityService service, CancellationToken ct) => {
+    await service.RequestAsync(r.Email, ChallengeTokens.VerifyEmail, ct);
+    return Results.Accepted(value: new { message = AccountSecurityService.GenericMessage });
+});
+auth.MapPost("/forgot-password", async (EmailRequest r, AccountSecurityService service, CancellationToken ct) => {
+    await service.RequestAsync(r.Email, ChallengeTokens.ResetPassword, ct);
+    return Results.Accepted(value: new { message = AccountSecurityService.GenericMessage });
+});
+auth.MapPost("/confirm-email", async (ConfirmEmailRequest r, AccountSecurityService service, CancellationToken ct) => {
+    await service.ConfirmAsync(r, ct); return Results.NoContent();
+});
+auth.MapPost("/reset-password", async (ResetPasswordRequest r, AccountSecurityService service, CancellationToken ct) => {
+    await service.ResetAsync(r, ct); return Results.NoContent();
+});
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("wallet");
+api.AddEndpointFilter<ValidationFilter>();
 api.AddEndpointFilter(async (context, next) => {
     context.HttpContext.Response.Headers.CacheControl = "no-store";
     return await next(context);
 });
+api.MapGet("/auth/sessions", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
+    var actor = UserId(user); var current = Guid.Parse(user.FindFirstValue("sid")!); var now = DateTimeOffset.UtcNow;
+    return Results.Ok(await db.Sessions.AsNoTracking().Where(x => x.UserId == actor && x.RevokedAt == null && x.ExpiresAt > now && x.SecurityStamp == x.User.SecurityStamp)
+        .OrderByDescending(x => x.CreatedAt).Take(100).Select(x => new SessionResponse(x.Id, x.CreatedAt, x.ExpiresAt, x.Id == current)).ToListAsync(ct));
+});
+api.MapDelete("/auth/sessions/{id:guid}", async (Guid id, ClaimsPrincipal user, AccountSecurityService service, CancellationToken ct) => {
+    await service.RevokeAsync(UserId(user), id, ct); return Results.NoContent();
+});
+api.MapPost("/auth/logout-all", async (ClaimsPrincipal user, AccountSecurityService service, CancellationToken ct) => {
+    await service.RevokeAllAsync(UserId(user), ct); return Results.NoContent();
+});
+api.MapPut("/operations/wallets/{id:guid}/state", async (Guid id, WalletStateRequest r, ClaimsPrincipal user, OperationsService service, CancellationToken ct) =>
+    Results.Ok(await service.SetWalletStateAsync(UserId(user), id, r, ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/reconciliation", async (ReconciliationService service, CancellationToken ct) =>
+    Results.Ok(await service.CheckAsync(ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/email-status", async (AppDbContext db, CancellationToken ct) => {
+    var now = DateTimeOffset.UtcNow;
+    return Results.Ok(new { pending = await db.EmailOutbox.CountAsync(x => x.SentAt == null && x.FailedAt == null && x.ExpiresAt > now, ct),
+        failed = await db.EmailOutbox.CountAsync(x => x.FailedAt != null, ct),
+        expiredPending = await db.EmailOutbox.CountAsync(x => x.SentAt == null && x.FailedAt == null && x.ExpiresAt <= now, ct) });
+}).RequireAuthorization("WalletOperator");
 api.MapGet("/wallets/me", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
     var id = UserId(user);
     var wallet = await db.Wallets.AsNoTracking().Where(x => x.UserId == id)
@@ -124,12 +204,18 @@ api.MapGet("/transfers/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbCo
         (walletIds.Contains(x.SourceWalletId) || walletIds.Contains(x.DestinationWalletId)), ct);
     return transfer is null ? Results.NotFound() : Results.Ok(TransferService.ToResponse(transfer));
 });
-api.MapGet("/transactions", async (int? page, int? pageSize, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
+api.MapGet("/transactions", async (int? page, int? pageSize, DateTimeOffset? from, DateTimeOffset? to, string? kind, string? direction, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
     var p = page ?? 1; var size = pageSize ?? 20;
     if (p < 1 || p > 100_000 || size < 1 || size > 100) throw new ApiException(400, "invalid_pagination", "Page must be 1–100000; pageSize must be 1–100.");
+    HistoryFilters.Validate(from, to, kind, direction);
     var actor = UserId(user);
     var walletIds = db.Wallets.Where(x => x.UserId == actor).Select(x => x.Id);
     var query = db.Transfers.AsNoTracking().Where(x => walletIds.Contains(x.SourceWalletId) || walletIds.Contains(x.DestinationWalletId));
+    if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
+    if (to.HasValue) query = query.Where(x => x.CreatedAt < to.Value);
+    if (kind is not null) query = query.Where(x => x.Kind == kind);
+    if (direction == "incoming") query = query.Where(x => walletIds.Contains(x.DestinationWalletId));
+    if (direction == "outgoing") query = query.Where(x => walletIds.Contains(x.SourceWalletId));
     var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Skip((p - 1) * size).Take(size + 1).ToListAsync(ct);
     return Results.Ok(new { page = p, pageSize = size, hasMore = items.Count > size, items = items.Take(size).Select(TransferService.ToResponse) });
 });

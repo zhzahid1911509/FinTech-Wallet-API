@@ -378,3 +378,113 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    ALTER TABLE [Sessions] ADD [CreatedAt] datetimeoffset NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    ALTER TABLE [Sessions] ADD [SecurityStamp] nvarchar(128) NOT NULL DEFAULT N'';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    ALTER TABLE [AuditEvents] ADD [Reason] nvarchar(500) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    CREATE TABLE [AccountChallenges] (
+        [Id] uniqueidentifier NOT NULL,
+        [UserId] uniqueidentifier NOT NULL,
+        [Purpose] nvarchar(32) NOT NULL,
+        [TokenHash] varchar(64) NOT NULL,
+        [SecurityStamp] nvarchar(128) NOT NULL,
+        [CreatedAt] datetimeoffset NOT NULL,
+        [ExpiresAt] datetimeoffset NOT NULL,
+        [UsedAt] datetimeoffset NULL,
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_AccountChallenges] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_AccountChallenges_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    CREATE TABLE [EmailOutbox] (
+        [Id] uniqueidentifier NOT NULL,
+        [ProtectedPayload] nvarchar(max) NOT NULL,
+        [CreatedAt] datetimeoffset NOT NULL,
+        [ExpiresAt] datetimeoffset NOT NULL,
+        [NextAttemptAt] datetimeoffset NOT NULL,
+        [Attempts] int NOT NULL,
+        [LeaseId] uniqueidentifier NULL,
+        [LeaseUntil] datetimeoffset NULL,
+        [SentAt] datetimeoffset NULL,
+        [FailedAt] datetimeoffset NULL,
+        [LastErrorType] nvarchar(128) NULL,
+        CONSTRAINT [PK_EmailOutbox] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_AccountChallenges_TokenHash] ON [AccountChallenges] ([TokenHash]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    CREATE INDEX [IX_AccountChallenges_UserId_Purpose_CreatedAt] ON [AccountChallenges] ([UserId], [Purpose], [CreatedAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    CREATE INDEX [IX_EmailOutbox_SentAt_FailedAt_NextAttemptAt] ON [EmailOutbox] ([SentAt], [FailedAt], [NextAttemptAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    UPDATE [Sessions] SET [RevokedAt] = SYSUTCDATETIME() WHERE [RevokedAt] IS NULL
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261025154416_AccountSecurityAndOperations'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261025154416_AccountSecurityAndOperations', N'10.0.13');
+END;
+
+COMMIT;
+GO
+

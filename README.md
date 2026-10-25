@@ -1,6 +1,6 @@
-# FinTech Wallet API — v0.1.0
+# FinTech Wallet API — v0.2.0
 
-An ASP.NET Core 10 / EF Core / SQL Server API implementing the first foundation and internal-transfer milestone. BDT only. This is a development release, not approval to handle real funds.
+An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation, internal transfers and the account-security/operations milestone. BDT only. This is a development release, not approval to handle real funds.
 
 ## Implemented
 
@@ -15,6 +15,21 @@ An ASP.NET Core 10 / EF Core / SQL Server API implementing the first foundation 
 - Amount/precision checks, insufficient-funds prevention, self-transfer and frozen-wallet checks.
 - Problem Details errors, basic rate limiting, liveness/readiness and development OpenAPI JSON.
 - Initial EF migration, local demo seeding, tests and a GitHub Actions SQL Server test workflow.
+
+## New in v0.2.0
+
+- Email verification required for login; durable verification messages queued during registration.
+- Single-use, expiring verification/recovery codes, resend cooldown and generic recovery responses.
+- Password reset invalidates all sessions; session list, individual revocation and logout-all.
+- Encrypted SQL email outbox, bounded retries, expiring worker leases, SMTP with required TLS and Development-only `.eml` pickup.
+- Database-checked WalletOperator permission, password-confirmed freeze/unfreeze with audit reasons.
+- Read-only ledger reconciliation through CLI or protected endpoint; email delivery status counters.
+- Transaction history date, type and incoming/outgoing filters.
+- Root status endpoint, runtime/design-time migration consistency tests and dependency lock files.
+
+**Upgrading an existing v0.1.0 database? Read [docs/UPGRADE-v0.2.0.md](docs/UPGRADE-v0.2.0.md) first.** The initial migration is preserved; the second migration is additive and revokes pre-upgrade sessions. Existing unverified users must verify their email. No users or balances are deleted or automatically marked verified.
+
+**New account verification, password recovery, SMTP setup and operator commands:** [docs/ACCOUNT-SECURITY.md](docs/ACCOUNT-SECURITY.md).
 
 ## Requirements
 
@@ -69,7 +84,7 @@ $env:Demo__Password = Read-Host 'Choose a demo password (12+ characters, upper/l
 dotnet run --launch-profile https -- --seed-demo
 ```
 
-This creates `alice@example.test` and `bob@example.test`, each with 10,000 BDT of simulated funds, using your chosen password. The offsetting system wallet and ledger entries preserve the accounting balance. Seeding refuses non-Development environments and databases containing users/wallets. It never tops up existing users. There is no public deposit/credit endpoint.
+This creates explicitly preverified development fixtures `alice@example.test` and `bob@example.test`, each with 10,000 BDT of simulated funds, using your chosen password. The offsetting system wallet and ledger entries preserve the accounting balance. Seeding refuses non-Development environments and databases containing users/wallets. It never tops up existing users. There is no public deposit/credit endpoint.
 
 ## 4. Start
 
@@ -77,7 +92,7 @@ This creates `alice@example.test` and `bob@example.test`, each with 10,000 BDT o
 dotnet run --launch-profile https
 ```
 
-- API: `https://localhost:7081`
+- API/status: `https://localhost:7081`
 - Liveness: `https://localhost:7081/health/live`
 - Readiness: `https://localhost:7081/health/ready`
 - Development OpenAPI JSON: `https://localhost:7081/openapi/v1.json`
@@ -105,7 +120,7 @@ Invoke-RestMethod "$base/api/v1/wallets/me" -Headers $aliceHeaders
 Invoke-RestMethod "$base/api/v1/transactions?page=1&pageSize=20" -Headers $aliceHeaders
 ```
 
-Expected balances: Alice 9,500 BDT; Bob 10,500 BDT. New registered accounts start at zero.
+Expected balances: Alice 9,500 BDT; Bob 10,500 BDT. New registered accounts start at zero and must verify their email before login. In Development, open the queued message in `App_Data/mail` and submit its token to `/api/v1/auth/confirm-email`; see the account-security guide.
 
 ## API summary
 
@@ -114,6 +129,16 @@ Expected balances: Alice 9,500 BDT; Bob 10,500 BDT. New registered accounts star
 | POST | `/api/v1/auth/register` | Public, limited | Register + create wallet |
 | POST | `/api/v1/auth/login` | Public, limited | Create a session/token pair |
 | POST | `/api/v1/auth/refresh` | Refresh token | Rotate token; reject reuse |
+| POST | `/api/v1/auth/resend-verification` | Public, limited | Queue another verification email |
+| POST | `/api/v1/auth/confirm-email` | Single-use code | Confirm email ownership |
+| POST | `/api/v1/auth/forgot-password` | Public, limited | Queue recovery email for an eligible account |
+| POST | `/api/v1/auth/reset-password` | Single-use code | Reset password and revoke sessions |
+| GET | `/api/v1/auth/sessions` | Bearer | List up to 100 active own sessions |
+| DELETE | `/api/v1/auth/sessions/{id}` | Owner | Revoke a session |
+| POST | `/api/v1/auth/logout-all` | Bearer | Revoke all own sessions |
+| PUT | `/api/v1/operations/wallets/{id}/state` | Operator + password | Freeze/unfreeze with an audit reason |
+| GET | `/api/v1/operations/reconciliation` | Operator | Check ledger consistency |
+| GET | `/api/v1/operations/email-status` | Operator | Delivery counts, never message content |
 | POST | `/api/v1/auth/logout` | Bearer | Revoke current session |
 | GET | `/api/v1/wallets/me` | Bearer | Own wallet ID and balance |
 | POST | `/api/v1/transfers` | Bearer + `Idempotency-Key` | Send BDT |

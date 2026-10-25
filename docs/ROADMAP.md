@@ -1,29 +1,24 @@
-# Roadmap after v0.1.0
+# Roadmap after v0.2.0
 
-This delivery starts the previously proposed plan; it does not complete every phase.
+## Completed milestones
 
-## Implemented milestone
+v0.1.0: wallet/Identity database, authenticated internal BDT transfers, paired ledger records, idempotency, concurrency retries, history, demo seeding, tests and CI.
 
-Database foundation, Identity-backed registration/login, rotating token sessions, own-wallet retrieval, atomic internal transfers, ledger entries, idempotency, concurrency retries, history, basic audit and operational endpoints. Initial migration, demo data, meaningful tests and CI are included.
+v0.2.0: email verification and password recovery, expiring single-use codes, encrypted durable email delivery with retries, session management and stamp-based invalidation, operator freeze/unfreeze with password confirmation/audit, on-demand internal reconciliation, filtered history, additive migration and dependency locks.
 
-## Next: complete account and operational foundations
+## Next priority
 
-1. Run the supplied SQL Server integration suite and fix any environment-specific failures; require it in branch protection.
-2. Email verification and password recovery using an actual delivery provider, one-time tokens, expiry, abuse controls and session invalidation after reset.
-3. MFA/step-up verification, session listing/revoke-all and explicit admin/support permissions.
-4. Controlled wallet freeze/unfreeze workflow with audited permissions; current transfer code respects stored freeze flags but there is no admin endpoint yet.
-5. Formal ledger reconciliation command/report and operational alerts.
-6. Date/type transaction filters and statements; current history supports bounded pagination only.
-7. Dependency lock files and update policy, secret scanning, safe deployment migrations and managed secret rotation.
+1. MFA enrollment, challenge/recovery codes and step-up verification; dual approval for sensitive operational changes.
+2. Observability: structured failure audit, metrics/alerts, email dead-letter operations and scheduled reconciliation.
+3. Distributed rate limiting, trusted proxy configuration and measured concurrency/load testing.
+4. Key rotation, least-privilege database grants, append-only storage controls, backups and restore drills.
+5. Retention/cleanup of used challenges, expired sessions, refresh tokens and completed email records; old tokens must remain detectable for the required replay window.
+6. Statements/receipts and support/admin workflow improvements.
 
-## Then: operational readiness
+## External payments milestone
 
-Structured telemetry, service-level metrics, trusted proxy configuration, distributed rate limiting, failure-event audit, retention policy, backup/restore drills, load tests, immutable storage/database access policy and dual approval for financial adjustments.
-
-## Then: external payments
-
-Provider abstraction, authenticated deduplicated webhooks, pending/settled state machines, balance holds, transactional outbox and idempotent inbox/consumers, settlement reconciliation and ambiguity resolution. No public endpoint should credit a balance based on a client assertion.
+Provider abstraction, authenticated deduplicated webhooks, pending/settled state machines, available/held balances, a financial transactional outbox and idempotent consumers, settlement reconciliation and ambiguity resolution. No public endpoint may credit funds based on a client assertion.
 
 ## Later product expansion
 
-Beneficiaries, payment requests, merchant/QR payments, authorized reversals/refunds, configurable fees/limits, scheduled payments and multi-currency accounting. Each requires its own authorization and accounting tests.
+Beneficiaries, payment requests, merchant/QR payments, authorized reversals/refunds, configurable fees/limits, scheduled payments and multi-currency accounting. Each requires specific authorization and accounting tests. Real-funds operation requires deployment, operational and applicable compliance work beyond these code milestones.

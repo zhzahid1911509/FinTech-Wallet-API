@@ -21,7 +21,7 @@ public static class DemoSeeder
         db.Wallets.Add(treasury);
         foreach (var email in new[] { "alice@example.test", "bob@example.test" })
         {
-            var user = new User { Id = Guid.NewGuid(), Email = email, UserName = email };
+            var user = new User { Id = Guid.NewGuid(), Email = email, UserName = email, EmailConfirmed = true };
             var result = await users.CreateAsync(user, password);
             if (!result.Succeeded) throw new InvalidOperationException(string.Join(" ", result.Errors.Select(x => x.Description)));
             var wallet = new Wallet { UserId = user.Id, Balance = 10_000m };

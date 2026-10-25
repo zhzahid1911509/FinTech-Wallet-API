@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet restore Tests/FinTechWalletAPI.Tests.csproj
+      - run: dotnet restore Tests/FinTechWalletAPI.Tests.csproj --locked-mode
       - run: dotnet build Tests/FinTechWalletAPI.Tests.csproj --no-restore --configuration Release
       - run: dotnet test Tests/FinTechWalletAPI.Tests.csproj --no-build --configuration Release --logger 'trx;LogFileName=tests.trx'
       - run: dotnet tool restore

@@ -480,3 +480,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local email messages and encryption keys
+App_Data/
+*.pfx
+*.p12

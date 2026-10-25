@@ -23,7 +23,7 @@ This is a single deployable application with module boundaries. It is not a dist
 7. Save and commit as one database transaction.
 8. On rowversion conflict, deadlock or unique-key contention, roll back, clear tracked state, and retry the whole transaction up to four total attempts with jitter. Exhaustion returns 409.
 
-SERIALIZABLE provides the isolation here; this release does not enable or claim RCSI. Rowversion is an additional stale-write guard. Contention can reduce throughput; load testing and workload measurements precede alternative locking strategies.
+SERIALIZABLE provides the transfer isolation here; this algorithm does not depend on RCSI. EF SQL Server database creation may enable RCSI for default read-committed operations. Rowversion is an additional stale-write guard. Contention can reduce throughput; load testing and workload measurements precede alternative locking strategies.
 
 After a timeout or ambiguous result, repeat the SAME payload with the SAME idempotency key. Do not generate a new key for a retry. Idempotency records are durable and are not expired in this release. Rejected requests that never commit do not reserve the key.
 
@@ -49,10 +49,21 @@ Clients must serialize refresh calls. Retrying a refresh whose response was lost
 
 ## Limitations requiring follow-up
 
-- No email verification/recovery delivery, MFA, role-based operations endpoints or session management UI.
+- Email verification/recovery, session APIs and the WalletOperator role are implemented in v0.2.0. MFA, dual approval and a session-management UI remain.
 - Account-registration conflicts currently reveal that an account exists; align this with the eventual onboarding/privacy policy.
 - Login timing is not equalized for unknown accounts; rate limiting is a basic single-process control.
 - Rate limiting is per remote IP for auth and per user for wallet operations, in memory. Configure trusted reverse proxies explicitly before using forwarded client IPs; do not trust arbitrary forwarded headers. Multi-instance deployments need shared enforcement.
 - Audit records cover successful registration/session and financial actions, not every rejected request or administrative event.
-- No distributed outbox, payment provider, reconciliation worker, holds, refunds or fraud engine.
+- A scoped durable email outbox and on-demand internal reconciliation are implemented. A general financial-event outbox, payment provider, scheduled reconciliation worker, holds, refunds and fraud engine remain.
 - No production deployment or live-money certification has been performed.
+
+
+## v0.2.0 security additions
+
+See ACCOUNT-SECURITY.md for the current account, email and operator behavior. Login requires confirmed email. Sessions are bound to the Identity security stamp, checked during access-token and refresh-token validation. Password reset and logout-all revoke sessions and rotate the stamp, preventing concurrently issued stale sessions from remaining usable. Failed-login counters are committed even when login returns 401.
+
+Email challenge hashes, account changes and encrypted outbox payloads share the same SQL transaction. Queue workers use conditional atomic claims and expiring leases. Email transport is outside the transaction; delivery is at least once. Terminal payloads are cleared. Keys are managed through ASP.NET Core Data Protection, separate from JWT signing.
+
+Account recovery returns generic eligibility-independent messages, but timings are not equalized. Registration still exposes duplicate accounts via 409. Rate limiting remains per-process and needs a distributed strategy before multi-instance production use. Recovery is email-only; MFA recovery and account compromise review are later work.
+
+Reconciliation checks ledger-to-balance projections and per-transfer posting structure; it is an internal consistency check, not external settlement reconciliation. Operator wallet state changes use current-password confirmation, database role checks and an audited reason. Console role changes identify the affected account; OS administrative identity must be captured by deployment audit infrastructure.

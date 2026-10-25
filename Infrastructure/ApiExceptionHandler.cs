@@ -11,9 +11,9 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             ApiException e => (e.Status, e.Code, e.Message),
             BadHttpRequestException => (400, "invalid_request", "The request is invalid."),
             DbUpdateConcurrencyException => (409, "concurrency_conflict", "The resource changed. Retry the operation."),
-            DbUpdateException e when e.InnerException is SqlException { Number: 2601 or 2627 }
+            Exception e when DatabaseErrors.SqlNumber(e) is 2601 or 2627
                 => (409, "duplicate_resource", "The resource already exists."),
-            SqlException or DbUpdateException => (503, "database_unavailable", "The operation could not complete. Retry later."),
+            Exception e when e is DbUpdateException || DatabaseErrors.SqlNumber(e) is not null => (503, "database_unavailable", "The operation could not complete. Retry later."),
             _ => (500, "internal_error", "An unexpected error occurred.")
         };
         // Do not serialize request bodies, credentials, or database exception messages to clients/logs.
