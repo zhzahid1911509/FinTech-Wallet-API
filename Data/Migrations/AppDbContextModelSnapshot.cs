@@ -391,6 +391,57 @@ namespace FinTechWalletAPI.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FinTechWalletAPI.Models.TransferAuthorization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ConsumedByTransferId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsumedByTransferId")
+                        .IsUnique()
+                        .HasFilter("[ConsumedByTransferId] IS NOT NULL");
+
+                    b.HasIndex("SessionId", "ExpiresAt");
+
+                    b.ToTable("TransferAuthorizations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TransferAuthorization_Expiry", "[ExpiresAt] > [CreatedAt]");
+                        });
+                });
+
             modelBuilder.Entity("FinTechWalletAPI.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -809,6 +860,22 @@ namespace FinTechWalletAPI.Data.Migrations
                         .HasForeignKey("SourceWalletId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FinTechWalletAPI.Models.TransferAuthorization", b =>
+                {
+                    b.HasOne("FinTechWalletAPI.Models.Transfer", null)
+                        .WithMany()
+                        .HasForeignKey("ConsumedByTransferId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FinTechWalletAPI.Models.AuthSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("FinTechWalletAPI.Models.Wallet", b =>

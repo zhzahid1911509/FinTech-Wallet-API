@@ -7,6 +7,7 @@ namespace FinTechWalletAPI.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<User, IdentityRole<Guid>, Guid>(options)
 {
+    public DbSet<TransferAuthorization> TransferAuthorizations => Set<TransferAuthorization>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
@@ -65,6 +66,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 t.HasCheckConstraint("CK_Ledger_OneSide", "([Debit] > 0 AND [Credit] = 0) OR ([Credit] > 0 AND [Debit] = 0)");
                 t.HasCheckConstraint("CK_Ledger_Currency", "[Currency] = 'BDT'");
             });
+        });
+        b.Entity<TransferAuthorization>(e => {
+            e.Property(x => x.RequestHash).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.IdempotencyKey).HasMaxLength(128).IsUnicode(false).UseCollation("Latin1_General_100_BIN2");
+            e.Property(x => x.RowVersion).IsRowVersion();
+            e.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Transfer>().WithMany().HasForeignKey(x => x.ConsumedByTransferId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.ConsumedByTransferId).IsUnique().HasFilter("[ConsumedByTransferId] IS NOT NULL");
+            e.HasIndex(x => new { x.SessionId, x.ExpiresAt });
+            e.ToTable("TransferAuthorizations", t => t.HasCheckConstraint("CK_TransferAuthorization_Expiry", "[ExpiresAt] > [CreatedAt]"));
         });
         b.Entity<AuthSession>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<AuthSession>().HasIndex(x => x.UserId);

@@ -619,3 +619,53 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026050740_RiskBasedTransferAuthorization'
+)
+BEGIN
+    CREATE TABLE [TransferAuthorizations] (
+        [Id] uniqueidentifier NOT NULL,
+        [SessionId] uniqueidentifier NOT NULL,
+        [RequestHash] varchar(64) NOT NULL,
+        [IdempotencyKey] varchar(128) COLLATE Latin1_General_100_BIN2 NOT NULL,
+        [CreatedAt] datetimeoffset NOT NULL,
+        [ExpiresAt] datetimeoffset NOT NULL,
+        [ConsumedByTransferId] uniqueidentifier NULL,
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_TransferAuthorizations] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_TransferAuthorization_Expiry] CHECK ([ExpiresAt] > [CreatedAt]),
+        CONSTRAINT [FK_TransferAuthorizations_Sessions_SessionId] FOREIGN KEY ([SessionId]) REFERENCES [Sessions] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_TransferAuthorizations_Transfers_ConsumedByTransferId] FOREIGN KEY ([ConsumedByTransferId]) REFERENCES [Transfers] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026050740_RiskBasedTransferAuthorization'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_TransferAuthorizations_ConsumedByTransferId] ON [TransferAuthorizations] ([ConsumedByTransferId]) WHERE [ConsumedByTransferId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026050740_RiskBasedTransferAuthorization'
+)
+BEGIN
+    CREATE INDEX [IX_TransferAuthorizations_SessionId_ExpiresAt] ON [TransferAuthorizations] ([SessionId], [ExpiresAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026050740_RiskBasedTransferAuthorization'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261026050740_RiskBasedTransferAuthorization', N'10.0.13');
+END;
+
+COMMIT;
+GO
+

@@ -1,10 +1,10 @@
-feat(security)!: add MFA and dual-approval wallet unfreezing
+feat(transfers)!: enforce risk-based transaction authorization
 
-- Add encrypted TOTP enrollment, replay protection and MFA lockout
-- Add hashed single-use recovery codes and session revocation
-- Require recent authenticator verification for operator mutations
-- Add two-person unfreeze requests with expiry and atomic audit records
-- Add additive migrations, security tests and build/upgrade guides
+- Evaluate amount, rolling spending, recipient and recovery-session risk
+- Bind short-lived password/TOTP approvals to session and transfer details
+- Consume approvals atomically with ledger postings and audit events
+- Preserve idempotent replay and reject mismatched or expired approvals
+- Add migration, SQL concurrency tests and build/upgrade documentation
 
-BREAKING CHANGE: direct wallet unfreezing now requires a separate operator
-approval; wallet-state mutations require recent TOTP verification.
+BREAKING CHANGE: risky transfers require transaction-specific MFA
+approval and authorizationId in the transfer request.

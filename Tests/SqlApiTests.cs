@@ -54,9 +54,9 @@ public sealed partial class SqlApiTests : IAsyncLifetime
     }
     private async Task<WalletResponse> Wallet(string token) =>
         (await (await Get("/api/v1/wallets/me", token)).Content.ReadFromJsonAsync<WalletResponse>())!;
-    private async Task<HttpResponseMessage> Send(string token, Guid recipient, decimal amount, string key)
+    private async Task<HttpResponseMessage> Send(string token, Guid recipient, decimal amount, string key, Guid? authorizationId = null)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/transfers") { Content = JsonContent.Create(new TransferRequest(recipient, amount)) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/transfers") { Content = JsonContent.Create(new TransferRequest(recipient, amount, authorizationId)) };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("Idempotency-Key", key);
         return await client.SendAsync(request);
@@ -97,9 +97,12 @@ public sealed partial class SqlApiTests : IAsyncLifetime
     [Fact]
     public async Task ConcurrentSpendsCannotOverdraw()
     {
-        var alice = await Login("alice@example.test"); var bob = await Login("bob@example.test");
+        var enrollment = await Enroll("alice@example.test");
+        var alice = await LoginMfa("alice@example.test", enrollment.Key); var bob = await Login("bob@example.test");
         var target = await Wallet(bob.AccessToken);
-        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(i => Send(alice.AccessToken, target.Id, 7000m, "parallel-" + i)));
+        var approvals = new List<TransferAuthorizationResponse>();
+        for (var i = 0; i < 4; i++) approvals.Add(await AuthorizeTransfer(alice, enrollment.Key, target.Id, 7000m, "parallel-" + i));
+        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(i => Send(alice.AccessToken, target.Id, 7000m, "parallel-" + i, approvals[i].Id)));
         Assert.Single(responses, x => x.StatusCode == HttpStatusCode.Created);
         Assert.All(responses.Where(x => x.StatusCode != HttpStatusCode.Created), x => Assert.Contains(x.StatusCode,
             new[] { HttpStatusCode.UnprocessableEntity, HttpStatusCode.Conflict }));

@@ -16,12 +16,13 @@ This is a single deployable application with module boundaries. It is not a dist
 
 1. Validate amount, recipient ID and `Idempotency-Key`.
 2. Start a SQL Server SERIALIZABLE transaction.
-3. Look up `(authenticated actor ID, idempotency key)`. If found, compare the request fingerprint; return the original transfer or 409 on mismatch.
+3. Recheck the session and security stamp inside the transaction. Look up `(authenticated actor ID, idempotency key)`. If found, compare the request fingerprint; return the original transfer or 409 on mismatch.
 4. Load the sender from the authenticated user, never from a client-provided sender ID.
 5. Load the recipient and reject system wallets, self-transfers, frozen wallets, currency mismatches, insufficient funds or balance overflow.
-6. Update both balances; create a transfer, one debit, one credit and a posting audit event.
-7. Save and commit as one database transaction.
-8. On rowversion conflict, deadlock or unique-key contention, roll back, clear tracked state, and retry the whole transaction up to four total attempts with jitter. Exhaustion returns 409.
+6. Evaluate current risk from posted transfers and session assurance. Require a valid transaction-bound authorization if risky (and validate any supplied authorization). Record risk denials without reserving the idempotency key.
+7. Update both balances; create a transfer, one debit, one credit, risk/posting audit events and consume the authorization if supplied.
+8. Save and commit as one database transaction.
+9. On rowversion conflict, deadlock or unique-key contention, roll back, clear tracked state, and retry the whole transaction up to four total attempts with jitter. Exhaustion returns 409.
 
 SERIALIZABLE provides the transfer isolation here; this algorithm does not depend on RCSI. EF SQL Server database creation may enable RCSI for default read-committed operations. Rowversion is an additional stale-write guard. Contention can reduce throughput; load testing and workload measurements precede alternative locking strategies.
 
@@ -78,3 +79,8 @@ Session `MfaVerifiedAt` and `AuthenticationMethod` are authoritative server-side
 Wallet unfreezing uses a persisted request bound to the requester security stamp and wallet state version. A distinct current operator with recent TOTP must approve within 30 minutes. The request decision, wallet state and audit records commit in one serializable transaction. A unique filtered index allows one Pending request per wallet; a SQL constraint prevents an Approved request from naming its requester as reviewer. Mutable approval state has rowversion protection, while audit events remain append-only through the application context.
 
 Freeze remains immediate for a recently authenticated operator. Two-person approval protects unfreezing only; future adjustments and payouts need their own approval designs. TOTP remains susceptible to real-time phishing; passkeys and device-bound credentials are future options.
+
+
+## v0.4.0 transfer risk
+
+See TRANSFER-RISK.md. Approval creation verifies current password and a fresh TOTP, then stores only session/key/fingerprint/expiry. Execution rechecks the live session, balance/freeze rules and current risk; approval consumption shares the posting transaction. An expired or mismatched approval cannot be substituted by recent login assurance. Posted replay is resolved before risk evaluation so response loss does not require a second approval or debit. This is a rules-based development policy, not a fraud-detection engine.

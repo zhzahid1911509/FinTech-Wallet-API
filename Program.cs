@@ -86,6 +86,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 builder.Services.AddAuthorization(o => o.AddPolicy("WalletOperator", p => p.RequireAuthenticatedUser().AddRequirements(new WalletOperatorRequirement())));
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddOptions<TransferRiskSettings>().Bind(builder.Configuration.GetSection("TransferRisk"))
+    .Validate(x => x.IsValid(), "TransferRisk thresholds must be positive BDT amounts up to 1,000,000 with two decimal places; AuthorizationSeconds must be 30–300.")
+    .ValidateOnStart();
+builder.Services.AddScoped<TransferRiskService>();
 builder.Services.AddScoped<TransferService>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -127,7 +131,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
-app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.3.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
+app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.4.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) => {
     try { return await db.Database.CanConnectAsync(ct) && !((await db.Database.GetPendingMigrationsAsync(ct)).Any())
@@ -231,8 +235,12 @@ api.MapGet("/wallets/me", async (ClaimsPrincipal user, AppDbContext db, Cancella
         .Select(x => new WalletResponse(x.Id, x.Currency, x.Balance, x.IsFrozen)).SingleOrDefaultAsync(ct);
     return wallet is null ? Results.NotFound() : Results.Ok(wallet);
 });
+api.MapPost("/transfers/assess", async (TransferRequest r, ClaimsPrincipal user, TransferRiskService service, CancellationToken ct) =>
+    Results.Ok(await service.AssessAsync(UserId(user), SessionId(user), r, ct)));
+api.MapPost("/transfers/authorizations", async (TransferAuthorizationRequest r, HttpContext context, TransferRiskService service, CancellationToken ct) =>
+    Results.Ok(await service.AuthorizeAsync(UserId(context.User), SessionId(context.User), r, context.Request.Headers["Idempotency-Key"].ToString(), ct)));
 api.MapPost("/transfers", async (TransferRequest r, HttpContext context, TransferService service, CancellationToken ct) => {
-    var result = await service.SendAsync(UserId(context.User), r, context.Request.Headers["Idempotency-Key"].ToString(), ct);
+    var result = await service.SendAsync(UserId(context.User), SessionId(context.User), r, context.Request.Headers["Idempotency-Key"].ToString(), ct);
     context.Response.Headers["Idempotency-Replayed"] = result.Replayed ? "true" : "false";
     return result.Replayed ? Results.Ok(result.Transfer) : Results.Created($"/api/v1/transfers/{result.Transfer.Id}", result.Transfer);
 });

@@ -114,3 +114,27 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"currentPassword":"{{password}}","reason":"Customer review completed"}
+
+
+### v0.4: assess transfer (advisory; authenticated)
+POST {{base}}/api/v1/transfers/assess
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"recipientWalletId":"{{recipientWalletId}}","amount":5000}
+
+### Authorize exact transfer; use a NEW authenticator code
+POST {{base}}/api/v1/transfers/authorizations
+Authorization: Bearer {{token}}
+Idempotency-Key: risk-example-001
+Content-Type: application/json
+
+{"recipientWalletId":"{{recipientWalletId}}","amount":5000,"currentPassword":"REPLACE","authenticatorCode":"REPLACE"}
+
+### Post before expiresAt; copy the returned approval ID
+POST {{base}}/api/v1/transfers
+Authorization: Bearer {{token}}
+Idempotency-Key: risk-example-001
+Content-Type: application/json
+
+{"recipientWalletId":"{{recipientWalletId}}","amount":5000,"authorizationId":"REPLACE_WITH_APPROVAL_GUID"}

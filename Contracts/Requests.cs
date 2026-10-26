@@ -9,7 +9,7 @@ public sealed record LoginRequest(
     [property: StringLength(6), RegularExpression("^[0-9]{6}$")] string? AuthenticatorCode = null,
     [property: StringLength(64)] string? RecoveryCode = null);
 public sealed record RefreshRequest([property: Required, StringLength(128, MinimumLength = 32)] string RefreshToken);
-public sealed record TransferRequest(Guid RecipientWalletId, decimal Amount);
+public sealed record TransferRequest(Guid RecipientWalletId, decimal Amount, Guid? AuthorizationId = null);
 public sealed record TokenResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt, Guid SessionId);
 public sealed record WalletResponse(Guid Id, string Currency, decimal Balance, bool IsFrozen);
 public sealed record TransferResponse(Guid Id, Guid SourceWalletId, Guid DestinationWalletId,

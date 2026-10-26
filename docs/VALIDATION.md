@@ -1,16 +1,16 @@
-# Validation — v0.3.0
+# Validation — v0.4.0
 
 Validated on 2026-10-26 with .NET SDK 10.0.402 / runtime 10.0.13 and a temporary SQL Server 2025 Developer instance (17.0.4065.4). Test databases were isolated and deleted by the suite.
 
 | Check | Result |
 |---|---|
 | Release build of API and tests | Passed; 0 warnings, 0 errors |
-| Complete test suite | 74 passed; 0 failed; 0 skipped |
-| Database-independent tests | 38 passed |
-| Real SQL Server integration tests | 36 passed |
+| Complete test suite | 101 passed; 0 failed; 0 skipped |
+| Database-independent tests | 51 passed |
+| Real SQL Server integration tests | 50 passed |
 | Runtime and design-time models vs snapshot | Both match |
 | EF CLI pending model check | No pending changes |
-| Existing v0.1.0/v0.2.0 migration files | Byte-for-byte unchanged |
+| Existing v0.1.0/v0.2.0/v0.3.0 migration files | Byte-for-byte unchanged |
 | Existing-data upgrade test | Passed: balances/ledger preserved, old sessions revoked |
 | Idempotent SQL migration script | Generated in `docs/schema.sql` |
 | NuGet vulnerability check including transitive API dependencies | No vulnerable packages reported by the configured feed at check time |
@@ -30,6 +30,8 @@ The first SQL run exposed EF-wrapped deadlock exceptions escaping the original r
 MFA integration: encrypted enrollment, session revocation, TOTP replay prevention, independent factor lockout, single-use recovery codes, disable/regeneration, refresh freshness and password reset preserving MFA.
 
 Approval integration: distinct reviewer enforcement, expiry, requester role/stamp and wallet-state invalidation, reject/cancel, concurrent TOTP use and atomic rollback.
+
+Transfer risk integration: enrollment requirements, current-password and single-use TOTP proof, binding to amount/key/recipient/session/actor, expiry, recovery-session restrictions, database-failure rollback of approval consumption, completed idempotent replay, session revocation, concurrent approved duplicates, rolling-window expiry and simultaneous spending at the cumulative threshold. Policy unit tests cover inclusive boundaries and invalid settings.
 
 ## Limits
 
