@@ -115,9 +115,17 @@ public sealed partial class SqlApiTests
         using var scope = factory.Services.CreateScope();
         await OperationsService.SetOperatorAsync(scope.ServiceProvider, "alice@example.test", true);
         Assert.Equal(HttpStatusCode.Forbidden, (await Authorized(HttpMethod.Put, path, alice.AccessToken, request with { CurrentPassword = "wrong" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Authorized(HttpMethod.Put, path, alice.AccessToken, request)).StatusCode);
+        var aliceMfa = await Enroll("alice@example.test");
+        alice = await LoginMfa("alice@example.test", aliceMfa.Key);
         Assert.Equal(HttpStatusCode.OK, (await Authorized(HttpMethod.Put, path, alice.AccessToken, request)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Send(alice.AccessToken, target.Id, 1m, "frozen")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await Authorized(HttpMethod.Put, path, alice.AccessToken, request with { IsFrozen = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Authorized(HttpMethod.Put, path, alice.AccessToken, request with { IsFrozen = false })).StatusCode);
+        var bobMfa = await Enroll("bob@example.test");
+        bob = await LoginMfa("bob@example.test", bobMfa.Key);
+        using (var grantScope = factory.Services.CreateScope()) await OperationsService.SetOperatorAsync(grantScope.ServiceProvider, "bob@example.test", true);
+        var approval = await RequestUnfreeze(alice, target.Id);
+        Assert.Equal(HttpStatusCode.OK, (await Decide(bob, approval.Id, "approve")).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await Send(alice.AccessToken, target.Id, 1m, "after-unfreeze")).StatusCode);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         Assert.Equal(2, await db.AuditEvents.CountAsync(x => x.TargetId == target.Id && (x.Action == "Wallet.Frozen" || x.Action == "Wallet.Unfrozen")));

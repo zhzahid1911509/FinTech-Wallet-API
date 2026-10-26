@@ -1,4 +1,4 @@
-# Roadmap after v0.2.0
+# Roadmap after v0.3.0
 
 ## Completed milestones
 
@@ -6,9 +6,11 @@ v0.1.0: wallet/Identity database, authenticated internal BDT transfers, paired l
 
 v0.2.0: email verification and password recovery, expiring single-use codes, encrypted durable email delivery with retries, session management and stamp-based invalidation, operator freeze/unfreeze with password confirmation/audit, on-demand internal reconciliation, filtered history, additive migration and dependency locks.
 
+v0.3.0: encrypted authenticator MFA, single-use hashed recovery codes, factor replay prevention and lockout, recent-MFA operator checks, and two-person wallet unfreezing with atomic decision/audit updates.
+
 ## Next priority
 
-1. MFA enrollment, challenge/recovery codes and step-up verification; dual approval for sensitive operational changes.
+1. Risk-based verification, phishing-resistant factors and account recovery when all factors are lost; extend dual approval to future financial adjustments.
 2. Observability: structured failure audit, metrics/alerts, email dead-letter operations and scheduled reconciliation.
 3. Distributed rate limiting, trusted proxy configuration and measured concurrency/load testing.
 4. Key rotation, least-privilege database grants, append-only storage controls, backups and restore drills.

@@ -488,3 +488,134 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    ALTER TABLE [Wallets] ADD [StateVersion] bigint NOT NULL DEFAULT CAST(0 AS bigint);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    ALTER TABLE [Sessions] ADD [AuthenticationMethod] nvarchar(16) NOT NULL DEFAULT N'';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    ALTER TABLE [Sessions] ADD [MfaVerifiedAt] datetimeoffset NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE TABLE [MfaProfiles] (
+        [UserId] uniqueidentifier NOT NULL,
+        [ProtectedSecret] nvarchar(max) NOT NULL,
+        [EnrollmentExpiresAt] datetimeoffset NULL,
+        [LastAcceptedStep] bigint NOT NULL,
+        [FailedAttempts] int NOT NULL,
+        [LockedUntil] datetimeoffset NULL,
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_MfaProfiles] PRIMARY KEY ([UserId]),
+        CONSTRAINT [FK_MfaProfiles_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE TABLE [MfaRecoveryCodes] (
+        [Id] uniqueidentifier NOT NULL,
+        [UserId] uniqueidentifier NOT NULL,
+        [Hash] varchar(64) NOT NULL,
+        [UsedAt] datetimeoffset NULL,
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_MfaRecoveryCodes] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_MfaRecoveryCodes_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE TABLE [WalletApprovals] (
+        [Id] uniqueidentifier NOT NULL,
+        [WalletId] uniqueidentifier NOT NULL,
+        [WalletStateVersion] bigint NOT NULL,
+        [RequestedBy] uniqueidentifier NOT NULL,
+        [RequesterSecurityStamp] nvarchar(128) NOT NULL,
+        [RequestedAt] datetimeoffset NOT NULL,
+        [ExpiresAt] datetimeoffset NOT NULL,
+        [Reason] nvarchar(500) NOT NULL,
+        [Status] nvarchar(24) NOT NULL,
+        [ReviewedBy] uniqueidentifier NULL,
+        [ReviewedAt] datetimeoffset NULL,
+        [ReviewReason] nvarchar(500) NULL,
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_WalletApprovals] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_Approval_SeparateReviewer] CHECK ([Status] <> 'Approved' OR ([ReviewedBy] IS NOT NULL AND [ReviewedBy] <> [RequestedBy])),
+        CONSTRAINT [CK_Approval_Status] CHECK ([Status] IN ('Pending','Approved','Rejected','Cancelled','Expired','Invalidated')),
+        CONSTRAINT [FK_WalletApprovals_AspNetUsers_RequestedBy] FOREIGN KEY ([RequestedBy]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_WalletApprovals_AspNetUsers_ReviewedBy] FOREIGN KEY ([ReviewedBy]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_WalletApprovals_Wallets_WalletId] FOREIGN KEY ([WalletId]) REFERENCES [Wallets] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_MfaRecoveryCodes_UserId_Hash] ON [MfaRecoveryCodes] ([UserId], [Hash]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE INDEX [IX_WalletApprovals_RequestedBy] ON [WalletApprovals] ([RequestedBy]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    CREATE INDEX [IX_WalletApprovals_ReviewedBy] ON [WalletApprovals] ([ReviewedBy]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_WalletApprovals_WalletId] ON [WalletApprovals] ([WalletId]) WHERE [Status] = ''Pending''');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261026041948_MfaAndWalletApprovals'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261026041948_MfaAndWalletApprovals', N'10.0.13');
+END;
+
+COMMIT;
+GO
+

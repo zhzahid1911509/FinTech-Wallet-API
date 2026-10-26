@@ -14,7 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace FinTechWalletAPI.Services;
 
 public sealed class AuthService(AppDbContext db, UserManager<User> users,
-    SignInManager<User> signIn, IOptions<JwtSettings> options, AccountSecurityService accountSecurity)
+    SignInManager<User> signIn, IOptions<JwtSettings> options, AccountSecurityService accountSecurity, MfaService mfa, TimeProvider clock)
 {
     private readonly JwtSettings settings = options.Value;
     public async Task<object> RegisterAsync(RegisterRequest request, CancellationToken ct)
@@ -46,7 +46,16 @@ public sealed class AuthService(AppDbContext db, UserManager<User> users,
             await tx.CommitAsync(ct);
             throw new ApiException(401, "invalid_credentials", "Invalid credentials, unverified email or account temporarily unavailable.");
         }
-        var session = new AuthSession { UserId = user.Id, SecurityStamp = user.SecurityStamp ?? "", ExpiresAt = DateTimeOffset.UtcNow.AddDays(settings.SessionDays) };
+        if (user.TwoFactorEnabled)
+        {
+            var error = await mfa.VerifyAsync(user, request.AuthenticatorCode, request.RecoveryCode, true, ct);
+            if (error is not null) {
+                await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+                throw new ApiException(403, error, "Supply a valid authenticator code or one unused recovery code. MFA codes are single-use.");
+            }
+        }
+        var session = new AuthSession { AuthenticationMethod = user.TwoFactorEnabled ? (!string.IsNullOrEmpty(request.RecoveryCode) ? "recovery" : "totp") : "password",
+            MfaVerifiedAt = user.TwoFactorEnabled && string.IsNullOrEmpty(request.RecoveryCode) ? clock.GetUtcNow() : null, UserId = user.Id, SecurityStamp = user.SecurityStamp ?? "", ExpiresAt = DateTimeOffset.UtcNow.AddDays(settings.SessionDays) };
         db.Sessions.Add(session);
         var response = Issue(session);
         db.AuditEvents.Add(new AuditEvent { ActorId = user.Id, TargetId = session.Id, Action = "Session.Created" });

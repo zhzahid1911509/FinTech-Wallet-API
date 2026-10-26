@@ -179,11 +179,19 @@ public sealed partial class SqlApiTests : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("ALTER TABLE LedgerEntries DROP CONSTRAINT CK_TestFailure");
         Assert.Equal(HttpStatusCode.Created, (await Send(alice.AccessToken, target.Id, 123m, "rollback")).StatusCode);
     }
+    private sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => now;
+        public void Advance(TimeSpan duration) => now += duration;
+    }
     private sealed class WalletFactory(string connection) : WebApplicationFactory<Program>
     {
+        public ManualClock Clock { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Clock));
             builder.UseSetting("Email:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:DefaultConnection", connection);
             builder.UseSetting("Jwt:SigningKey", "integration-tests-only-not-a-production-key-239!");

@@ -1,4 +1,6 @@
-# Account security and operations — v0.2.0
+# Account security and operations — updated for v0.3.0
+
+MFA enrollment and the current two-person unfreeze workflow are documented in [MFA-AND-APPROVALS.md](MFA-AND-APPROVALS.md).
 
 ## Local email delivery (no provider account required)
 
@@ -137,7 +139,7 @@ Content-Type: application/json
 {"isFrozen":true,"reason":"Review requested by support","currentPassword":"OPERATOR_CURRENT_PASSWORD"}
 ```
 
-The current password is required in addition to operator permission. Set `isFrozen` to false to unfreeze. System wallets cannot be changed through this endpoint. Repeating an already-applied state is a no-op; changed states and reasons are audited. Transfers involving a frozen wallet are rejected, while replay of an already-posted transfer still returns its original result. MFA and dual approval are not implemented yet.
+The current password and recent authenticator verification are required in addition to operator permission. Direct `isFrozen:false` is rejected in v0.3.0; use the two-person unfreeze-request workflow. System wallets cannot be changed through this endpoint. Repeating an already-applied state is a no-op; changed states and reasons are audited. Transfers involving a frozen wallet are rejected, while replay of an already-posted transfer still returns its original result. MFA and two-person unfreezing are implemented in v0.3.0.
 
 ## Reconciliation
 

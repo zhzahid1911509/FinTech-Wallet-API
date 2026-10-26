@@ -1,0 +1,10 @@
+feat(security)!: add MFA and dual-approval wallet unfreezing
+
+- Add encrypted TOTP enrollment, replay protection and MFA lockout
+- Add hashed single-use recovery codes and session revocation
+- Require recent authenticator verification for operator mutations
+- Add two-person unfreeze requests with expiry and atomic audit records
+- Add additive migrations, security tests and build/upgrade guides
+
+BREAKING CHANGE: direct wallet unfreezing now requires a separate operator
+approval; wallet-state mutations require recent TOTP verification.

@@ -7,6 +7,7 @@ public sealed class Wallet
     public string Currency { get; set; } = "BDT";
     public decimal Balance { get; set; }
     public bool IsSystem { get; set; }
+    public long StateVersion { get; set; }
     public bool IsFrozen { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public byte[] RowVersion { get; set; } = [];

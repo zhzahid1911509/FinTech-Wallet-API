@@ -46,6 +46,10 @@ builder.Services.AddSingleton<IEmailTransport, EmailTransport>();
 builder.Services.AddScoped<EmailDispatcher>();
 builder.Services.AddHostedService<EmailWorker>();
 builder.Services.AddScoped<AccountSecurityService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<MfaSecrets>();
+builder.Services.AddScoped<MfaService>();
+builder.Services.AddScoped<WalletApprovalService>();
 builder.Services.AddScoped<OperationsService>();
 builder.Services.AddScoped<ReconciliationService>();
 builder.Services.AddScoped<IAuthorizationHandler, WalletOperatorHandler>();
@@ -123,7 +127,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
-app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.2.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
+app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.3.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) => {
     try { return await db.Database.CanConnectAsync(ct) && !((await db.Database.GetPendingMigrationsAsync(ct)).Any())
@@ -165,6 +169,41 @@ api.AddEndpointFilter(async (context, next) => {
     context.HttpContext.Response.Headers.CacheControl = "no-store";
     return await next(context);
 });
+api.MapGet("/auth/mfa/status", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
+    var actor = UserId(user);
+    var enabled = await db.Users.Where(x => x.Id == actor).Select(x => x.TwoFactorEnabled).SingleAsync(ct);
+    var lockedUntil = await db.MfaProfiles.Where(x => x.UserId == actor).Select(x => x.LockedUntil).SingleOrDefaultAsync(ct);
+    return Results.Ok(new { enabled, lockedUntil, recoveryCodesRemaining = await db.MfaRecoveryCodes.CountAsync(x => x.UserId == actor && x.UsedAt == null, ct) });
+});
+api.MapPost("/auth/mfa/enrollment", async (PasswordRequest r, ClaimsPrincipal user, MfaService service, CancellationToken ct) =>
+    Results.Ok(await service.BeginAsync(UserId(user), SessionId(user), r.CurrentPassword, ct)));
+api.MapPost("/auth/mfa/confirm", async (MfaConfirmRequest r, ClaimsPrincipal user, MfaService service, CancellationToken ct) =>
+    Results.Ok(await service.ConfirmAsync(UserId(user), SessionId(user), r.Code, ct)));
+api.MapPost("/auth/mfa/step-up", async (MfaProofRequest r, ClaimsPrincipal user, MfaService service, CancellationToken ct) => {
+    await service.StepUpAsync(UserId(user), SessionId(user), r, ct); return Results.NoContent();
+});
+api.MapPost("/auth/mfa/disable", async (MfaProofRequest r, ClaimsPrincipal user, MfaService service, CancellationToken ct) => {
+    await service.DisableAsync(UserId(user), SessionId(user), r, ct); return Results.NoContent();
+});
+api.MapPost("/auth/mfa/recovery-codes", async (MfaProofRequest r, ClaimsPrincipal user, MfaService service, CancellationToken ct) =>
+    Results.Ok(await service.RegenerateAsync(UserId(user), SessionId(user), r, ct)));
+api.MapPost("/operations/wallets/{id:guid}/unfreeze-requests", async (Guid id, ApprovalActionRequest r, ClaimsPrincipal user, WalletApprovalService service, CancellationToken ct) => {
+    var item = await service.RequestAsync(UserId(user), SessionId(user), id, r, ct);
+    return Results.Created($"/api/v1/operations/unfreeze-requests/{item.Id}", item);
+}).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/unfreeze-requests", async (string? status, AppDbContext db, CancellationToken ct) => {
+    if (status is not null && status is not ("Pending" or "Approved" or "Rejected" or "Cancelled" or "Expired" or "Invalidated"))
+        throw new ApiException(400, "invalid_status", "Unsupported approval status.");
+    var query = db.WalletApprovals.AsNoTracking();
+    if (status is not null) query = query.Where(x => x.Status == status);
+    return Results.Ok((await query.OrderByDescending(x => x.RequestedAt).ThenByDescending(x => x.Id).Take(100).ToListAsync(ct)).Select(WalletApprovalService.ToResponse));
+}).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/unfreeze-requests/{id:guid}", async (Guid id, AppDbContext db, CancellationToken ct) => {
+    var item = await db.WalletApprovals.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+    return item is null ? Results.NotFound() : Results.Ok(WalletApprovalService.ToResponse(item));
+}).RequireAuthorization("WalletOperator");
+api.MapPost("/operations/unfreeze-requests/{id:guid}/{decision}", async (Guid id, string decision, ApprovalActionRequest r, ClaimsPrincipal user, WalletApprovalService service, CancellationToken ct) =>
+    Results.Ok(await service.DecideAsync(UserId(user), SessionId(user), id, decision, r, ct))).RequireAuthorization("WalletOperator");
 api.MapGet("/auth/sessions", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct) => {
     var actor = UserId(user); var current = Guid.Parse(user.FindFirstValue("sid")!); var now = DateTimeOffset.UtcNow;
     return Results.Ok(await db.Sessions.AsNoTracking().Where(x => x.UserId == actor && x.RevokedAt == null && x.ExpiresAt > now && x.SecurityStamp == x.User.SecurityStamp)
@@ -177,7 +216,7 @@ api.MapPost("/auth/logout-all", async (ClaimsPrincipal user, AccountSecurityServ
     await service.RevokeAllAsync(UserId(user), ct); return Results.NoContent();
 });
 api.MapPut("/operations/wallets/{id:guid}/state", async (Guid id, WalletStateRequest r, ClaimsPrincipal user, OperationsService service, CancellationToken ct) =>
-    Results.Ok(await service.SetWalletStateAsync(UserId(user), id, r, ct))).RequireAuthorization("WalletOperator");
+    Results.Ok(await service.SetWalletStateAsync(UserId(user), SessionId(user), id, r, ct))).RequireAuthorization("WalletOperator");
 api.MapGet("/operations/reconciliation", async (ReconciliationService service, CancellationToken ct) =>
     Results.Ok(await service.CheckAsync(ct))).RequireAuthorization("WalletOperator");
 api.MapGet("/operations/email-status", async (AppDbContext db, CancellationToken ct) => {
@@ -220,5 +259,6 @@ api.MapGet("/transactions", async (int? page, int? pageSize, DateTimeOffset? fro
     return Results.Ok(new { page = p, pageSize = size, hasMore = items.Count > size, items = items.Take(size).Select(TransferService.ToResponse) });
 });
 app.Run();
+static Guid SessionId(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue("sid")!);
 static Guid UserId(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue("sub")!);
 public partial class Program { }

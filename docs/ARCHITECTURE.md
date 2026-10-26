@@ -49,7 +49,7 @@ Clients must serialize refresh calls. Retrying a refresh whose response was lost
 
 ## Limitations requiring follow-up
 
-- Email verification/recovery, session APIs and the WalletOperator role are implemented in v0.2.0. MFA, dual approval and a session-management UI remain.
+- Email verification/recovery, session APIs and the WalletOperator role are implemented in v0.2.0. MFA and two-person unfreezing are added in v0.3.0; a session-management UI remains.
 - Account-registration conflicts currently reveal that an account exists; align this with the eventual onboarding/privacy policy.
 - Login timing is not equalized for unknown accounts; rate limiting is a basic single-process control.
 - Rate limiting is per remote IP for auth and per user for wallet operations, in memory. Configure trusted reverse proxies explicitly before using forwarded client IPs; do not trust arbitrary forwarded headers. Multi-instance deployments need shared enforcement.
@@ -64,6 +64,17 @@ See ACCOUNT-SECURITY.md for the current account, email and operator behavior. Lo
 
 Email challenge hashes, account changes and encrypted outbox payloads share the same SQL transaction. Queue workers use conditional atomic claims and expiring leases. Email transport is outside the transaction; delivery is at least once. Terminal payloads are cleared. Keys are managed through ASP.NET Core Data Protection, separate from JWT signing.
 
-Account recovery returns generic eligibility-independent messages, but timings are not equalized. Registration still exposes duplicate accounts via 409. Rate limiting remains per-process and needs a distributed strategy before multi-instance production use. Recovery is email-only; MFA recovery and account compromise review are later work.
+Account recovery returns generic eligibility-independent messages, but timings are not equalized. Registration still exposes duplicate accounts via 409. Rate limiting remains per-process and needs a distributed strategy before multi-instance production use. Recovery is email-only; Single-use MFA recovery codes are added in v0.3.0; recovery without any factor and account compromise review remain later work.
 
 Reconciliation checks ledger-to-balance projections and per-transfer posting structure; it is an internal consistency check, not external settlement reconciliation. Operator wallet state changes use current-password confirmation, database role checks and an audited reason. Console role changes identify the affected account; OS administrative identity must be captured by deployment audit infrastructure.
+
+
+## v0.3.0 authenticator and approval security
+
+MFA uses Otp.NET TOTP verification with SHA-1/6 digits/30 seconds and an adjacent-window tolerance of one step. Secrets are protected with a separate Data Protection purpose. The last accepted step is persisted and strictly increases; recovery codes have 128 bits of entropy and are stored as hashes. Factor failures have a separate persisted lockout so successful password verification cannot clear the factor's failed-attempt counter. Factor consumption and session creation share a serializable transaction.
+
+Session `MfaVerifiedAt` and `AuthenticationMethod` are authoritative server-side values; clients cannot provide them. Recovery login does not satisfy operator step-up. Refresh never renews the MFA timestamp. Password reset preserves enrolled MFA. Enabling/disabling MFA or replacing recovery codes rotates the security stamp and revokes sessions.
+
+Wallet unfreezing uses a persisted request bound to the requester security stamp and wallet state version. A distinct current operator with recent TOTP must approve within 30 minutes. The request decision, wallet state and audit records commit in one serializable transaction. A unique filtered index allows one Pending request per wallet; a SQL constraint prevents an Approved request from naming its requester as reviewer. Mutable approval state has rowversion protection, while audit events remain append-only through the application context.
+
+Freeze remains immediate for a recently authenticated operator. Two-person approval protects unfreezing only; future adjustments and payouts need their own approval designs. TOTP remains susceptible to real-time phishing; passkeys and device-bound credentials are future options.

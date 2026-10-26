@@ -1,6 +1,6 @@
-# FinTech Wallet API — v0.2.0
+# FinTech Wallet API — v0.3.0
 
-An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation, internal transfers and the account-security/operations milestone. BDT only. This is a development release, not approval to handle real funds.
+An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation, internal transfers and the account-security, MFA and operational-approval milestones. BDT only. This is a development release, not approval to handle real funds.
 
 ## Implemented
 
@@ -15,6 +15,19 @@ An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation
 - Amount/precision checks, insufficient-funds prevention, self-transfer and frozen-wallet checks.
 - Problem Details errors, basic rate limiting, liveness/readiness and development OpenAPI JSON.
 - Initial EF migration, local demo seeding, tests and a GitHub Actions SQL Server test workflow.
+
+## New in v0.3.0
+
+- Authenticator-app TOTP enrollment, code replay prevention and independent MFA lockout.
+- One-time recovery codes stored only as hashes; encrypted authenticator secrets.
+- MFA-aware login and recent-authenticator step-up for operator mutations.
+- Session invalidation and email notifications for MFA configuration changes.
+- Two-person wallet unfreezing with expiry, state/security checks and atomic audit records.
+- Additive migration, security regression tests and explicit build instructions.
+
+**Build/test/run commands:** [BUILD.md](BUILD.md). **Upgrade:** [docs/UPGRADE-v0.3.0.md](docs/UPGRADE-v0.3.0.md).
+**MFA and approval API examples:** [docs/MFA-AND-APPROVALS.md](docs/MFA-AND-APPROVALS.md).
+**GitHub commit text:** [COMMIT_MESSAGE.txt](COMMIT_MESSAGE.txt).
 
 ## New in v0.2.0
 
@@ -136,7 +149,15 @@ Expected balances: Alice 9,500 BDT; Bob 10,500 BDT. New registered accounts star
 | GET | `/api/v1/auth/sessions` | Bearer | List up to 100 active own sessions |
 | DELETE | `/api/v1/auth/sessions/{id}` | Owner | Revoke a session |
 | POST | `/api/v1/auth/logout-all` | Bearer | Revoke all own sessions |
-| PUT | `/api/v1/operations/wallets/{id}/state` | Operator + password | Freeze/unfreeze with an audit reason |
+| PUT | `/api/v1/operations/wallets/{id}/state` | Operator + password + recent TOTP | Freeze with an audit reason |
+| POST | `/api/v1/operations/wallets/{id}/unfreeze-requests` | Operator + password + recent TOTP | Request unfreezing |
+| POST | `/api/v1/operations/unfreeze-requests/{id}/{decision}` | Operator + password + recent TOTP | Approve/reject as a different operator, or cancel as requester |
+| GET | `/api/v1/auth/mfa/status` | Bearer | MFA status and remaining-code count |
+| POST | `/api/v1/auth/mfa/enrollment` | Bearer + password | Begin authenticator setup |
+| POST | `/api/v1/auth/mfa/confirm` | Bearer + TOTP | Enable MFA; return recovery codes once |
+| POST | `/api/v1/auth/mfa/step-up` | Bearer + password + TOTP | Verify recent MFA |
+| POST | `/api/v1/auth/mfa/recovery-codes` | Bearer + password + TOTP | Replace recovery codes |
+| POST | `/api/v1/auth/mfa/disable` | Bearer + password + factor | Disable MFA and revoke sessions |
 | GET | `/api/v1/operations/reconciliation` | Operator | Check ledger consistency |
 | GET | `/api/v1/operations/email-status` | Operator | Delivery counts, never message content |
 | POST | `/api/v1/auth/logout` | Bearer | Revoke current session |

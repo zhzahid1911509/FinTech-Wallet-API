@@ -12,6 +12,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
     public DbSet<AuthSession> Sessions => Set<AuthSession>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<MfaProfile> MfaProfiles => Set<MfaProfile>();
+    public DbSet<MfaRecoveryCode> MfaRecoveryCodes => Set<MfaRecoveryCode>();
+    public DbSet<WalletApproval> WalletApprovals => Set<WalletApproval>();
     public DbSet<AccountChallenge> AccountChallenges => Set<AccountChallenge>();
     public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
@@ -71,6 +74,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.RowVersion).IsRowVersion();
             e.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
         });
+        b.Entity<MfaProfile>(e => {
+            e.HasKey(x => x.UserId);
+            e.HasOne(x => x.User).WithOne().HasForeignKey<MfaProfile>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.RowVersion).IsRowVersion();
+        });
+        b.Entity<MfaRecoveryCode>(e => {
+            e.Property(x => x.Hash).HasMaxLength(64).IsUnicode(false);
+            e.HasIndex(x => new { x.UserId, x.Hash }).IsUnique();
+            e.Property(x => x.RowVersion).IsRowVersion();
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<WalletApproval>(e => {
+            e.Property(x => x.RequesterSecurityStamp).HasMaxLength(128);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ReviewReason).HasMaxLength(500);
+            e.Property(x => x.Status).HasMaxLength(24);
+            e.Property(x => x.RowVersion).IsRowVersion();
+            e.HasIndex(x => x.WalletId).IsUnique().HasFilter("[Status] = 'Pending'");
+            e.HasOne(x => x.Wallet).WithMany().HasForeignKey(x => x.WalletId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedBy).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable("WalletApprovals", t => {
+                t.HasCheckConstraint("CK_Approval_Status", "[Status] IN ('Pending','Approved','Rejected','Cancelled','Expired','Invalidated')");
+                t.HasCheckConstraint("CK_Approval_SeparateReviewer", "[Status] <> 'Approved' OR ([ReviewedBy] IS NOT NULL AND [ReviewedBy] <> [RequestedBy])");
+            });
+        });
+        b.Entity<AuthSession>().Property(x => x.AuthenticationMethod).HasMaxLength(16);
         b.Entity<AccountChallenge>(e => {
             e.Property(x => x.Purpose).HasMaxLength(32);
             e.Property(x => x.TokenHash).HasMaxLength(64).IsUnicode(false);

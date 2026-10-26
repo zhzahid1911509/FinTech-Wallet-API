@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-10-26
+
+- Add TOTP enrollment, encrypted secrets, one-time-step replay prevention and independent MFA lockout.
+- Add hashed recovery codes, MFA-aware login, step-up, code replacement and disable flows.
+- Revoke sessions and queue email notifications after MFA configuration changes.
+- Require recent TOTP for operator mutations; add two-person unfreeze requests and atomic audit/state updates.
+- Add expiry, requester security/role checks, wallet state version checks and rejection/cancellation.
+- Preserve prior migrations and add MfaAndWalletApprovals.
+- Add security/integration tests, BUILD.md, upgrade instructions and COMMIT_MESSAGE.txt.
+
+Breaking change: direct wallet unfreezing is replaced by the separate-operator approval workflow.
+
 ## 0.2.0 — 2026-10-25
 
 - Add mandatory email verification, single-use recovery codes and password reset with session invalidation.

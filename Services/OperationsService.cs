@@ -19,22 +19,23 @@ public sealed class WalletOperatorHandler(AppDbContext db) : AuthorizationHandle
             context.Succeed(requirement);
     }
 }
-public sealed class OperationsService(AppDbContext db, UserManager<User> users, SignInManager<User> signIn)
+public sealed class OperationsService(AppDbContext db, UserManager<User> users, MfaService mfa)
 {
-    public async Task<WalletResponse> SetWalletStateAsync(Guid actor, Guid walletId, WalletStateRequest request, CancellationToken ct)
+    public async Task<WalletResponse> SetWalletStateAsync(Guid actor, Guid sessionId, Guid walletId, WalletStateRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length < 5)
             throw new ApiException(400, "reason_required", "Provide an audit reason of at least five characters.");
-        var user = await users.FindByIdAsync(actor.ToString());
-        if (user is null || !(await signIn.CheckPasswordSignInAsync(user, request.CurrentPassword, true)).Succeeded)
-            throw new ApiException(403, "step_up_failed", "Current-password verification failed.");
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var user = await mfa.RequirePasswordAsync(actor, sessionId, request.CurrentPassword, tx, ct);
+        await mfa.RequireRecentAsync(actor, sessionId, ct);
+        if (!request.IsFrozen) throw new ApiException(409, "two_person_approval_required", "Create an unfreeze request for approval by a different operator.");
         if (!await users.IsInRoleAsync(user, "WalletOperator")) throw new ApiException(403, "operator_required", "Operator permission is required.");
         var wallet = await db.Wallets.SingleOrDefaultAsync(x => x.Id == walletId && !x.IsSystem, ct)
             ?? throw new ApiException(404, "wallet_not_found", "Customer wallet was not found.");
         if (wallet.IsFrozen != request.IsFrozen)
         {
             wallet.IsFrozen = request.IsFrozen;
+            wallet.StateVersion++;
             db.AuditEvents.Add(new AuditEvent { ActorId = actor, TargetId = wallet.Id,
                 Action = request.IsFrozen ? "Wallet.Frozen" : "Wallet.Unfrozen", Reason = request.Reason.Trim() });
             await db.SaveChangesAsync(ct);
