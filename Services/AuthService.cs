@@ -42,6 +42,10 @@ public sealed class AuthService(AppDbContext db, UserManager<User> users,
         var user = await users.FindByEmailAsync(request.Email.Trim());
         if (user is null || !(await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true)).Succeeded)
             {
+            if (user is not null) {
+                db.AuditEvents.Add(new AuditEvent { ActorId = user.Id, TargetId = user.Id, Action = "Auth.LoginFailed" });
+                await db.SaveChangesAsync(ct);
+            }
             // Persist Identity's failed-login counter/lockout even though the request is rejected.
             await tx.CommitAsync(ct);
             throw new ApiException(401, "invalid_credentials", "Invalid credentials, unverified email or account temporarily unavailable.");

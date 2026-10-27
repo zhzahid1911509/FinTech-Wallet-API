@@ -8,6 +8,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<User, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<TransferAuthorization> TransferAuthorizations => Set<TransferAuthorization>();
+    public DbSet<ReconciliationRun> ReconciliationRuns => Set<ReconciliationRun>();
+    public DbSet<ReconciliationSchedule> ReconciliationSchedules => Set<ReconciliationSchedule>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
@@ -23,6 +25,26 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.Entity<ReconciliationSchedule>(e => {
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.ToTable("ReconciliationSchedules", t => {
+                t.HasCheckConstraint("CK_ReconciliationSchedule_Singleton", "[Id] = 1");
+                t.HasCheckConstraint("CK_ReconciliationSchedule_Lease", "([LeaseId] IS NULL AND [LeaseUntil] IS NULL) OR ([LeaseId] IS NOT NULL AND [LeaseUntil] IS NOT NULL)");
+            });
+            e.HasData(new ReconciliationSchedule { Id = 1, NextRunAt = DateTimeOffset.UnixEpoch });
+        });
+        b.Entity<ReconciliationRun>(e => {
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.ErrorType).HasMaxLength(128);
+            e.HasIndex(x => new { x.StartedAt, x.Id });
+            e.ToTable("ReconciliationRuns", t => {
+                t.HasCheckConstraint("CK_ReconciliationRun_Status", "[Status] IN ('Running','Healthy','Unhealthy','Failed','Abandoned')");
+                t.HasCheckConstraint("CK_ReconciliationRun_Finished", "([Status] = 'Running' AND [FinishedAt] IS NULL) OR ([Status] <> 'Running' AND [FinishedAt] IS NOT NULL)");
+            });
+        });
+        b.Entity<AuditEvent>().HasIndex(x => new { x.CreatedAt, x.Id });
+        b.Entity<AuditEvent>().HasIndex(x => new { x.Action, x.CreatedAt });
+        b.Entity<AuditEvent>().HasIndex(x => new { x.ActorId, x.CreatedAt });
         b.Entity<User>().HasIndex(x => x.NormalizedEmail).IsUnique();
         b.Entity<Wallet>(e => {
             e.HasIndex(x => x.UserId).IsUnique().HasFilter("[UserId] IS NOT NULL");

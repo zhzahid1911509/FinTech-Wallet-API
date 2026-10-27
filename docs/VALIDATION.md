@@ -1,17 +1,17 @@
-# Validation — v0.4.0
+# Validation — v0.5.0
 
-Validated on 2026-10-26 with .NET SDK 10.0.402 / runtime 10.0.13 and a temporary SQL Server 2025 Developer instance (17.0.4065.4). Test databases were isolated and deleted by the suite.
+Validated on 2026-10-27 with .NET SDK 10.0.402 / runtime 10.0.13 and a temporary SQL Server 2025 Developer instance (17.0.4065.4). Test databases were isolated and deleted by the suite.
 
 | Check | Result |
 |---|---|
 | Release build of API and tests | Passed; 0 warnings, 0 errors |
-| Complete test suite | 101 passed; 0 failed; 0 skipped |
-| Database-independent tests | 51 passed |
-| Real SQL Server integration tests | 50 passed |
+| Complete test suite | 129 passed; 0 failed; 0 skipped |
+| Database-independent tests | 63 passed |
+| Real SQL Server integration tests | 66 passed |
 | Runtime and design-time models vs snapshot | Both match |
 | EF CLI pending model check | No pending changes |
-| Existing v0.1.0/v0.2.0/v0.3.0 migration files | Byte-for-byte unchanged |
-| Existing-data upgrade test | Passed: balances/ledger preserved, old sessions revoked |
+| Existing v0.1.0–v0.4.0 migration files | Byte-for-byte unchanged |
+| Existing-data upgrade test | Passed: initial upgrade revokes old sessions; v0.4-to-v0.5 upgrade preserves valid sessions, balances and ledger |
 | Idempotent SQL migration script | Generated in `docs/schema.sql` |
 | NuGet vulnerability check including transitive API dependencies | No vulnerable packages reported by the configured feed at check time |
 
@@ -33,8 +33,11 @@ Approval integration: distinct reviewer enforcement, expiry, requester role/stam
 
 Transfer risk integration: enrollment requirements, current-password and single-use TOTP proof, binding to amount/key/recipient/session/actor, expiry, recovery-session restrictions, database-failure rollback of approval consumption, completed idempotent replay, session revocation, concurrent approved duplicates, rolling-window expiry and simultaneous spending at the cumulative threshold. Policy unit tests cover inclusive boundaries and invalid settings.
 
+Monitoring integration: healthy/unhealthy reports, scheduled due times, competing claims, expired-lease recovery, fenced late completion, check failure sanitization, real cancellation timeout, atomic completion/audit rollback, never-run/stale alerts, current-role access checks, audit pagination/filter validation, email payload redaction, rolling failure alerts, login failure audit and v0.4-to-v0.5 data preservation.
+
 ## Limits
 
+- Scheduler tests directly invoke the scoped scheduler against SQL Server with hosted workers disabled in fixtures. Lease competition and fencing are tested using separate scopes; no multi-host deployment or external monitoring collector was exercised.
 - SMTP code compiled and the queue/transport interface was tested; no live provider email was sent or inbox delivery verified.
 - SQL Server 2025 was exercised locally. The supplied CI targets SQL Server 2022, but that remote workflow was not executed here.
 - No production deployment, sustained load test, external payment integration or disaster-recovery drill was performed.

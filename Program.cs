@@ -52,6 +52,12 @@ builder.Services.AddScoped<MfaService>();
 builder.Services.AddScoped<WalletApprovalService>();
 builder.Services.AddScoped<OperationsService>();
 builder.Services.AddScoped<ReconciliationService>();
+builder.Services.AddScoped<IReconciliationCheck>(sp => sp.GetRequiredService<ReconciliationService>());
+builder.Services.AddOptions<ReconciliationSettings>().Bind(builder.Configuration.GetSection("Reconciliation"))
+    .Validate(x => x.IsValid(), "Invalid Reconciliation interval, timeout, staleness or email backlog settings.").ValidateOnStart();
+builder.Services.AddScoped<ReconciliationScheduler>();
+builder.Services.AddScoped<OperationsMonitoring>();
+builder.Services.AddHostedService<ReconciliationWorker>();
 builder.Services.AddScoped<IAuthorizationHandler, WalletOperatorHandler>();
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connection));
 builder.Services.AddIdentityCore<User>(o => {
@@ -131,7 +137,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
-app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.4.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
+app.MapGet("/", () => Results.Ok(new { name = "FinTech Wallet API", version = "0.5.0", health = "/health/live", documentation = "/openapi/v1.json (Development only)" }));
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) => {
     try { return await db.Database.CanConnectAsync(ct) && !((await db.Database.GetPendingMigrationsAsync(ct)).Any())
@@ -223,6 +229,16 @@ api.MapPut("/operations/wallets/{id:guid}/state", async (Guid id, WalletStateReq
     Results.Ok(await service.SetWalletStateAsync(UserId(user), SessionId(user), id, r, ct))).RequireAuthorization("WalletOperator");
 api.MapGet("/operations/reconciliation", async (ReconciliationService service, CancellationToken ct) =>
     Results.Ok(await service.CheckAsync(ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/monitoring", async (OperationsMonitoring service, CancellationToken ct) =>
+    Results.Ok(await service.SummaryAsync(ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/audit-events", async (int? page, int? pageSize, DateTimeOffset? from, DateTimeOffset? to, string? action, Guid? actorId, Guid? targetId, OperationsMonitoring service, CancellationToken ct) =>
+    Results.Ok(await service.AuditAsync(page, pageSize, from, to, action, actorId, targetId, ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/reconciliation-runs", async (int? page, int? pageSize, OperationsMonitoring service, CancellationToken ct) =>
+    Results.Ok(await service.RunsAsync(page, pageSize, ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/reconciliation-runs/{id:guid}", async (Guid id, OperationsMonitoring service, CancellationToken ct) =>
+    Results.Ok(await service.RunAsync(id, ct))).RequireAuthorization("WalletOperator");
+api.MapGet("/operations/email-jobs", async (string? state, int? page, int? pageSize, OperationsMonitoring service, CancellationToken ct) =>
+    Results.Ok(await service.EmailJobsAsync(state, page, pageSize, ct))).RequireAuthorization("WalletOperator");
 api.MapGet("/operations/email-status", async (AppDbContext db, CancellationToken ct) => {
     var now = DateTimeOffset.UtcNow;
     return Results.Ok(new { pending = await db.EmailOutbox.CountAsync(x => x.SentAt == null && x.FailedAt == null && x.ExpiresAt > now, ct),

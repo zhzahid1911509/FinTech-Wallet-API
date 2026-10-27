@@ -5,7 +5,9 @@ namespace FinTechWalletAPI.Services;
 public sealed record BalanceMismatch(Guid WalletId, string Currency, decimal Balance, decimal LedgerBalance);
 public sealed record ReconciliationReport(DateTimeOffset CheckedAt, bool Healthy, int BalanceMismatchCount,
     int PostingMismatchCount, IReadOnlyList<BalanceMismatch> BalanceMismatches, IReadOnlyList<Guid> PostingMismatches);
-public sealed class ReconciliationService(AppDbContext db)
+public interface IReconciliationCheck
+{ Task<ReconciliationReport> CheckAsync(CancellationToken ct); }
+public sealed class ReconciliationService(AppDbContext db) : IReconciliationCheck
 {
     public async Task<ReconciliationReport> CheckAsync(CancellationToken ct)
     {

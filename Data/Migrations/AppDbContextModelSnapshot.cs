@@ -98,6 +98,12 @@ namespace FinTechWalletAPI.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Action", "CreatedAt");
+
+                    b.HasIndex("ActorId", "CreatedAt");
+
+                    b.HasIndex("CreatedAt", "Id");
+
                     b.ToTable("AuditEvents");
                 });
 
@@ -290,6 +296,79 @@ namespace FinTechWalletAPI.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("MfaRecoveryCodes");
+                });
+
+            modelBuilder.Entity("FinTechWalletAPI.Models.ReconciliationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("BalanceMismatchCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ErrorType")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("PostingMismatchCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReportJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt", "Id");
+
+                    b.ToTable("ReconciliationRuns", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReconciliationRun_Finished", "([Status] = 'Running' AND [FinishedAt] IS NULL) OR ([Status] <> 'Running' AND [FinishedAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ReconciliationRun_Status", "[Status] IN ('Running','Healthy','Unhealthy','Failed','Abandoned')");
+                        });
+                });
+
+            modelBuilder.Entity("FinTechWalletAPI.Models.ReconciliationSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("NextRunAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ReconciliationSchedules", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReconciliationSchedule_Lease", "([LeaseId] IS NULL AND [LeaseUntil] IS NULL) OR ([LeaseId] IS NOT NULL AND [LeaseUntil] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ReconciliationSchedule_Singleton", "[Id] = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            NextRunAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
                 });
 
             modelBuilder.Entity("FinTechWalletAPI.Models.RefreshToken", b =>

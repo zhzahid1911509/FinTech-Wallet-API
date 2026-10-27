@@ -1,10 +1,7 @@
-feat(transfers)!: enforce risk-based transaction authorization
+feat(operations): add scheduled reconciliation and monitoring
 
-- Evaluate amount, rolling spending, recipient and recovery-session risk
-- Bind short-lived password/TOTP approvals to session and transfer details
-- Consume approvals atomically with ledger postings and audit events
-- Preserve idempotent replay and reject mismatched or expired approvals
-- Add migration, SQL concurrency tests and build/upgrade documentation
-
-BREAKING CHANGE: risky transfers require transaction-specific MFA
-approval and authorizationId in the transfer request.
+- Coordinate reconciliation workers with SQL leases and fenced completion
+- Persist run history, mismatch reports and completion audit events
+- Add operator monitoring, audit search and redacted email inspection
+- Audit known-account login failures without recording credentials
+- Add migration, failure/concurrency tests and operational documentation

@@ -1,4 +1,4 @@
-# FinTech Wallet API — v0.4.0
+# FinTech Wallet API — v0.5.0
 
 An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation, internal transfers and the account-security, MFA and operational-approval milestones. BDT only. This is a development release, not approval to handle real funds.
 
@@ -15,6 +15,16 @@ An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation
 - Amount/precision checks, insufficient-funds prevention, self-transfer and frozen-wallet checks.
 - Problem Details errors, basic rate limiting, liveness/readiness and development OpenAPI JSON.
 - Initial EF migration, local demo seeding, tests and a GitHub Actions SQL Server test workflow.
+
+## New in v0.5.0
+
+- Scheduled internal reconciliation with shared SQL leases, crash recovery and fenced result publication.
+- Durable run history and bounded mismatch reports; no automatic balance repair.
+- Operator-only monitoring snapshot, searchable audit history and redacted failed-email inspection.
+- Known-account login failure audit and rolling security counters.
+- Additive migration and scheduler/concurrency/failure tests.
+
+**Operations guide:** [docs/OPERATIONS-MONITORING.md](docs/OPERATIONS-MONITORING.md). **Upgrade:** [docs/UPGRADE-v0.5.0.md](docs/UPGRADE-v0.5.0.md).
 
 ## New in v0.4.0
 
@@ -35,7 +45,7 @@ An ASP.NET Core 10 / EF Core / SQL Server API implementing the wallet foundation
 - Two-person wallet unfreezing with expiry, state/security checks and atomic audit records.
 - Additive migration, security regression tests and explicit build instructions.
 
-**Build/test/run commands:** [BUILD.md](BUILD.md). **Upgrade:** [docs/UPGRADE-v0.4.0.md](docs/UPGRADE-v0.4.0.md).
+**Build/test/run commands:** [BUILD.md](BUILD.md). **Upgrade:** [docs/UPGRADE-v0.5.0.md](docs/UPGRADE-v0.5.0.md).
 **MFA and approval API examples:** [docs/MFA-AND-APPROVALS.md](docs/MFA-AND-APPROVALS.md).
 **GitHub commit text:** [COMMIT_MESSAGE.txt](COMMIT_MESSAGE.txt).
 

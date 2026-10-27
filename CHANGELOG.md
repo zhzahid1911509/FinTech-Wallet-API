@@ -1,3 +1,7 @@
+# v0.5.0 — 2026-10-27
+
+Add scheduled reconciliation with database lease fencing, persisted reports and system audit events. Add operator monitoring snapshots, audit search, redacted email-job inspection and known-account login-failure audit. Add operational migration, security/concurrency tests and setup/upgrade guides. External alerts and phishing-resistant authentication remain pending.
+
 # v0.4.0 — 2026-10-26
 
 Risk-based transfer authorization: configurable server-side thresholds, advisory assessment, exact-transfer password/TOTP approvals, atomic consumption, persisted risk audit, additive migration and security/concurrency tests. Breaking client change: risky transfers require authorizationId. Passkeys and total-factor-loss recovery remain pending.

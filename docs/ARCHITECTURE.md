@@ -55,7 +55,7 @@ Clients must serialize refresh calls. Retrying a refresh whose response was lost
 - Login timing is not equalized for unknown accounts; rate limiting is a basic single-process control.
 - Rate limiting is per remote IP for auth and per user for wallet operations, in memory. Configure trusted reverse proxies explicitly before using forwarded client IPs; do not trust arbitrary forwarded headers. Multi-instance deployments need shared enforcement.
 - Audit records cover successful registration/session and financial actions, not every rejected request or administrative event.
-- A scoped durable email outbox and on-demand internal reconciliation are implemented. A general financial-event outbox, payment provider, scheduled reconciliation worker, holds, refunds and fraud engine remain.
+- A scoped durable email outbox and on-demand internal reconciliation are implemented. A general financial-event outbox, payment provider, holds, refunds and fraud engine remain. Scheduled reconciliation is added in v0.5.0.
 - No production deployment or live-money certification has been performed.
 
 
@@ -84,3 +84,10 @@ Freeze remains immediate for a recently authenticated operator. Two-person appro
 ## v0.4.0 transfer risk
 
 See TRANSFER-RISK.md. Approval creation verifies current password and a fresh TOTP, then stores only session/key/fingerprint/expiry. Execution rechecks the live session, balance/freeze rules and current risk; approval consumption shares the posting transaction. An expired or mismatched approval cannot be substituted by recent login assurance. Posted replay is resolved before risk evaluation so response loss does not require a second approval or debit. This is a rules-based development policy, not a fraud-detection engine.
+
+
+## v0.5.0 operational monitoring
+
+A BackgroundService creates a scope for each scheduler poll. SQL conditionally claims one schedule lease and creates a Running record atomically. The check runs read-only; only an unexpired lease token may atomically store results, completion audit, release and next due time. Expired owners become Abandoned when replaced. Late results cannot overwrite the replacement. Cancellation is cooperative, so expired checks may overlap briefly without financial writes.
+
+Monitoring endpoints are role-protected and return explicit projections. Email payloads are never exposed. Snapshot counters are approximate under concurrency; reconciliation retains its consistent financial read. A synthetic all-zero actor ID identifies background completion audit events. Known-account login failures are persisted without passwords or detailed credential-failure reasons. No external alert delivery is configured. See OPERATIONS-MONITORING.md for operational limits and setup.

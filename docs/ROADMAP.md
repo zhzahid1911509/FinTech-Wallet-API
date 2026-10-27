@@ -1,4 +1,4 @@
-# Roadmap after v0.4.0
+# Roadmap after v0.5.0
 
 ## Completed milestones
 
@@ -10,10 +10,12 @@ v0.3.0: encrypted authenticator MFA, single-use hashed recovery codes, factor re
 
 v0.4.0: deterministic transfer risk policy, transaction-bound password/TOTP authorizations, atomic consumption, risk audit records and concurrency/replay tests.
 
+v0.5.0: scheduled reconciliation with durable runs and SQL lease fencing, operator JSON monitoring, audit search, redacted email-job inspection and known-account login failure audit.
+
 ## Next priority
 
 1. Phishing-resistant factors and account recovery when all factors are lost; extend risk signals beyond the v0.4 transfer policy and dual approval to future financial adjustments.
-2. Observability: structured failure audit, metrics/alerts, email dead-letter operations and scheduled reconciliation.
+2. Extend v0.5 monitoring with external metric/alert delivery, incident acknowledgment, broader failure coverage and safe email remediation workflows.
 3. Distributed rate limiting, trusted proxy configuration and measured concurrency/load testing.
 4. Key rotation, least-privilege database grants, append-only storage controls, backups and restore drills.
 5. Retention/cleanup of used challenges, expired sessions, refresh tokens and completed email records; old tokens must remain detectable for the required replay window.

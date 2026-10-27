@@ -196,6 +196,7 @@ public sealed partial class SqlApiTests : IAsyncLifetime
             builder.UseEnvironment("Development");
             builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Clock));
             builder.UseSetting("Email:WorkerEnabled", "false");
+            builder.UseSetting("Reconciliation:WorkerEnabled", "false");
             builder.UseSetting("ConnectionStrings:DefaultConnection", connection);
             builder.UseSetting("Jwt:SigningKey", "integration-tests-only-not-a-production-key-239!");
             builder.UseSetting("Demo:Password", "Test-Only-Password-239!");

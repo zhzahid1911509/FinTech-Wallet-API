@@ -138,3 +138,20 @@ Idempotency-Key: risk-example-001
 Content-Type: application/json
 
 {"recipientWalletId":"{{recipientWalletId}}","amount":5000,"authorizationId":"REPLACE_WITH_APPROVAL_GUID"}
+
+
+### v0.5: operator monitoring (current WalletOperator role required)
+GET {{base}}/api/v1/operations/monitoring
+Authorization: Bearer {{token}}
+
+### Scheduled reconciliation history
+GET {{base}}/api/v1/operations/reconciliation-runs?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Audit search
+GET {{base}}/api/v1/operations/audit-events?action=Transfer.RiskDenied&pageSize=20
+Authorization: Bearer {{token}}
+
+### Failed-email metadata (no payload or recipient disclosure)
+GET {{base}}/api/v1/operations/email-jobs?state=failed&pageSize=20
+Authorization: Bearer {{token}}

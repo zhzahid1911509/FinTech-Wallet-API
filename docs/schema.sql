@@ -669,3 +669,97 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE TABLE [ReconciliationRuns] (
+        [Id] uniqueidentifier NOT NULL,
+        [StartedAt] datetimeoffset NOT NULL,
+        [FinishedAt] datetimeoffset NULL,
+        [Status] nvarchar(16) NOT NULL,
+        [BalanceMismatchCount] int NULL,
+        [PostingMismatchCount] int NULL,
+        [ReportJson] nvarchar(max) NULL,
+        [ErrorType] nvarchar(128) NULL,
+        CONSTRAINT [PK_ReconciliationRuns] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_ReconciliationRun_Finished] CHECK (([Status] = 'Running' AND [FinishedAt] IS NULL) OR ([Status] <> 'Running' AND [FinishedAt] IS NOT NULL)),
+        CONSTRAINT [CK_ReconciliationRun_Status] CHECK ([Status] IN ('Running','Healthy','Unhealthy','Failed','Abandoned'))
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE TABLE [ReconciliationSchedules] (
+        [Id] int NOT NULL,
+        [NextRunAt] datetimeoffset NOT NULL,
+        [LeaseId] uniqueidentifier NULL,
+        [LeaseUntil] datetimeoffset NULL,
+        CONSTRAINT [PK_ReconciliationSchedules] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_ReconciliationSchedule_Lease] CHECK (([LeaseId] IS NULL AND [LeaseUntil] IS NULL) OR ([LeaseId] IS NOT NULL AND [LeaseUntil] IS NOT NULL)),
+        CONSTRAINT [CK_ReconciliationSchedule_Singleton] CHECK ([Id] = 1)
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'LeaseId', N'LeaseUntil', N'NextRunAt') AND [object_id] = OBJECT_ID(N'[ReconciliationSchedules]'))
+        SET IDENTITY_INSERT [ReconciliationSchedules] ON;
+    EXEC(N'INSERT INTO [ReconciliationSchedules] ([Id], [LeaseId], [LeaseUntil], [NextRunAt])
+    VALUES (1, NULL, NULL, ''1970-01-01T00:00:00.0000000+00:00'')');
+    IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'LeaseId', N'LeaseUntil', N'NextRunAt') AND [object_id] = OBJECT_ID(N'[ReconciliationSchedules]'))
+        SET IDENTITY_INSERT [ReconciliationSchedules] OFF;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE INDEX [IX_AuditEvents_Action_CreatedAt] ON [AuditEvents] ([Action], [CreatedAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE INDEX [IX_AuditEvents_ActorId_CreatedAt] ON [AuditEvents] ([ActorId], [CreatedAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE INDEX [IX_AuditEvents_CreatedAt_Id] ON [AuditEvents] ([CreatedAt], [Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    CREATE INDEX [IX_ReconciliationRuns_StartedAt_Id] ON [ReconciliationRuns] ([StartedAt], [Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261027025610_OperationalMonitoring'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261027025610_OperationalMonitoring', N'10.0.13');
+END;
+
+COMMIT;
+GO
+
